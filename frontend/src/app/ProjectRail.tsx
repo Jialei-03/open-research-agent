@@ -43,7 +43,7 @@ export function ProjectRail({
     team.notifications.map((m) => ({ ...m, workspace_id: id })),
   );
   const waiting = needsYou(data, messages);
-  const all = section === "research" && hash.startsWith("projects");
+  const all = section === "research" && hash.split("?")[0] === "all";
   return (
     <div className={styles.projectRail}>
       <Tooltip
@@ -54,10 +54,10 @@ export function ProjectRail({
           className={styles.projectTile}
           data-id={sidebarId("all-projects")}
           data-all
-          href="#projects"
+          href="#all"
           aria-label={t("projects.all")}
           aria-current={all ? "page" : undefined}
-          onClick={followLink(go, "projects")}
+          onClick={followLink(go, "all")}
         >
           <LayoutGrid size={18} aria-hidden />
         </a>

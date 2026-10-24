@@ -9,6 +9,8 @@ import {
   FolderPlus,
   LayoutGrid,
   MoreHorizontal,
+  Sparkle,
+  User,
   Hash,
   Plus,
   Settings,
@@ -39,6 +41,7 @@ import {
 } from "./team-api";
 import { useResearchNavigation } from "./ResearchNavigation";
 import { needsYou } from "./navigation-attention";
+import { useWorkspaceTeams } from "./workspace-teams";
 import { AppActions } from "../../app/AppSidebar";
 import { sidebarId } from "../../app/sidebar-entries";
 import {
@@ -124,12 +127,13 @@ export function ProjectHeader({
   const id = useTeamWorkspace(hash);
   const { data } = useResearchNavigation();
   const workspace = data.workspaces.find((w) => w.id === id);
+  const all = parseAppRoute(hash).screen === "all-projects";
   return (
     <div className={styles.switcher}>
       <h2 className={nav.projectName} data-id={sidebarId("workspace")}>
-        {workspace?.name || t("workspace.choose")}
+        {all ? t("projects.all") : workspace?.name || t("workspace.choose")}
       </h2>
-      {id && (
+      {id && !all && (
         <Menu
           label={t("research.actions")}
           trigger={(props) => (
@@ -163,7 +167,7 @@ export function ProjectHeader({
               id: "all",
               icon: LayoutGrid,
               label: t("projects.all"),
-              onSelect: () => go("projects"),
+              onSelect: () => go("all"),
             },
           ]}
         />
@@ -207,6 +211,8 @@ export function TeamNavigation({
   const [saving, setSaving] = useState(false);
   const [creatingProject, setCreatingProject] = useState(false);
   const { ready } = useResearchNavigation();
+  if (parseAppRoute(hash).screen === "all-projects")
+    return <AllConversations go={go} />;
   // Nothing to list before there is a project: one way forward, nothing that leads nowhere.
   if (!id)
     return ready ? (
@@ -556,6 +562,84 @@ export function TeamConversationList({
           choose={chooseDms}
         />
       </div>
+    </div>
+  );
+}
+
+/** In "All projects": each project's latest conversations, newest first, under its name. */
+function AllConversations({ go }: { go(hash: string): void }) {
+  const { t, locale } = useI18n();
+  const { data } = useResearchNavigation();
+  const open = data.workspaces.filter((w) => !w.archived);
+  const teams = useWorkspaceTeams(open.map((w) => w.id));
+  return (
+    <div className={nav.navigation} data-sidebar-place="all">
+      {open.map((w) => {
+        const team = teams.get(w.id);
+        const members = new Map(team?.members.map((m) => [m.id, m]));
+        const rows = [
+          ...w.researches
+            .filter((r) => !r.archived_at)
+            .map((r) => ({
+              key: `r:${r.id}`,
+              at: r.updated_at,
+              name: r.title || r.question,
+              hash: `research/${r.id}`,
+              mark: "research" as const,
+            })),
+          ...(team?.channels || []).map((c) => {
+            const member = c.member_id ? members.get(c.member_id) : undefined;
+            return {
+              key: `c:${c.id}`,
+              at: c.last_at || "",
+              name: member
+                ? memberName(member, t)
+                : defaultChannelNames[c.key] === c.name
+                  ? t(`team.channel.${c.key}` as MessageKey)
+                  : c.name,
+              hash: teamHash(w.id, c.id),
+              mark: member ? ("dm" as const) : ("group" as const),
+            };
+          }),
+        ]
+          .sort((a, b) => (Date.parse(b.at) || 0) - (Date.parse(a.at) || 0))
+          .slice(0, 4);
+        return (
+          <section key={w.id} aria-label={w.name}>
+            <a
+              className={nav.heading}
+              href={`#${teamHash(w.id)}`}
+              onClick={followLink(go, teamHash(w.id))}
+            >
+              <span>{w.name}</span>
+            </a>
+            <div className={nav.conversations}>
+              {rows.map((row) => (
+                <a
+                  key={row.key}
+                  className={nav.allRow}
+                  href={`#${row.hash}`}
+                  onClick={followLink(go, row.hash)}
+                >
+                  {row.mark === "group" ? (
+                    <Hash size={14} aria-hidden="true" />
+                  ) : row.mark === "research" ? (
+                    <Sparkle size={14} aria-hidden="true" />
+                  ) : (
+                    <User size={14} aria-hidden="true" />
+                  )}
+                  <span className={nav.name}>{row.name}</span>
+                  {row.at && (
+                    <time dateTime={row.at}>
+                      {threadDate(row.at, locale, new Date(), "conversation")}
+                    </time>
+                  )}
+                </a>
+              ))}
+            </div>
+          </section>
+        );
+      })}
     </div>
   );
 }

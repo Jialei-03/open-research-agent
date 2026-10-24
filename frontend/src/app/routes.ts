@@ -64,6 +64,7 @@ export type AppRoute =
       redirect?: string;
     }
   | { screen: "inbox"; workspaceId?: string; redirect?: string }
+  | { screen: "all-projects"; redirect?: string }
   | { screen: "open"; url: string; redirect?: string }
   | { screen: "reader"; reader: ReaderRoute; redirect?: string };
 
@@ -159,6 +160,7 @@ export function parseAppRoute(hash: string): AppRoute {
         }
       : { screen: "new-research", redirect: "new" };
   }
+  if (path === "all") return { screen: "all-projects" };
   if (path === "inbox") {
     const workspaceId =
       new URLSearchParams(hash.split("?")[1] || "").get("workspace") || "";

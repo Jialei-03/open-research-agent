@@ -389,3 +389,39 @@
   align-items: center;
   gap: var(--ui-space-4);
 }
+
+.allRow {
+  display: flex;
+  align-items: center;
+  gap: var(--ui-space-8);
+  height: var(--ui-control-md);
+  padding: 0 var(--ui-space-10);
+  border-radius: var(--ui-r-8);
+  color: var(--ui-fg-1);
+  font-size: var(--ui-text-13);
+  text-decoration: none;
+}
+
+.allRow:hover {
+  background: var(--ui-hover);
+  color: var(--ui-fg);
+}
+
+.allRow svg {
+  flex: none;
+  color: var(--ui-fg-3);
+}
+
+.allRow .name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.allRow time {
+  flex: none;
+  color: var(--ui-fg-3);
+  font-size: var(--ui-text-12);
+}

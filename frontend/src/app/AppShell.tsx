@@ -52,6 +52,7 @@ import { ResearchNavigationProvider } from "../screens/research/ResearchNavigati
 import { LocalOnly } from "../screens/research/LocalOnly";
 import { TeamScreen } from "../screens/research/TeamScreen";
 import { Inbox } from "../screens/research/Inbox";
+import { AllProjects } from "../screens/research/AllProjects";
 import { ResearchProject } from "../screens/research/ResearchProject";
 import { ScheduleCenter } from "../screens/schedules/ScheduleCenter";
 import { CustomizeScreen } from "../screens/customize/CustomizeScreen";
@@ -336,6 +337,9 @@ function App({ user, setUser }: { user: User; setUser: (user: null) => void }) {
             !(shown.screen === "customize" && shown.section === "models") && (
               <LocalOnly />
             )}
+          {shown.screen === "all-projects" && local !== false && (
+            <AllProjects go={go} />
+          )}
           {shown.screen === "inbox" && local !== false && (
             <Inbox workspaceId={shown.workspaceId} go={go} />
           )}
