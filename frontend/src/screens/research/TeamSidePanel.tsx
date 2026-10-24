@@ -128,6 +128,7 @@ export function TeamSidePanel({
   onLocate,
   onClose,
   fileRequest,
+  bare = false,
 }: {
   team: Team;
   messages: TeamMessage[];
@@ -136,6 +137,8 @@ export function TeamSidePanel({
   onLocate(messageId: string): void;
   onClose(): void;
   fileRequest: number;
+  /** Only the sections, for the right panel's files tab. */
+  bare?: boolean;
 }) {
   const { t } = useI18n();
   const filesSection = useRef<HTMLElement>(null);
@@ -156,6 +159,93 @@ export function TeamSidePanel({
       filesSection.current?.focus();
     }
   }, [fileRequest]);
+  if (bare && empty) return null;
+  const sections = (
+    <div
+      className={bare ? styles.bare : empty ? styles.empty : styles.sections}
+    >
+      {!!pins.length && (
+        <section aria-label={t("team.pinned")}>
+          <h3>{t("team.pinned")}</h3>
+          {pins.map((message) => (
+            <button
+              key={message.id}
+              type="button"
+              className={styles.pin}
+              aria-label={message.preview || message.text || t("team.message")}
+              data-pin-id={message.id}
+              onClick={() => onLocate(message.id)}
+            >
+              <Pin aria-hidden />
+              <span>
+                {message.text && <span>{message.preview || message.text}</span>}
+                {conversationOutputs([message]).files.map((file) => (
+                  <span key={file.path || file.url}>
+                    <FileText aria-hidden />
+                    {file.name}
+                  </span>
+                ))}
+              </span>
+              <ArrowUpRight aria-hidden />
+            </button>
+          ))}
+        </section>
+      )}
+      {progress.length > 0 && (
+        <section aria-label={t("team.progress")}>
+          <h3>{t("team.progress")}</h3>
+          {progress.map(({ member, messageId, status }) => (
+            <button
+              key={member.id}
+              type="button"
+              className={styles.progress}
+              onClick={() => onLocate(messageId)}
+            >
+              <MemberAvatar member={member} size="sm" />
+              <span>{memberName(member, t)}</span>
+              <span className={styles.state}>{t(`team.status.${status}`)}</span>
+              <ArrowUpRight aria-hidden />
+            </button>
+          ))}
+        </section>
+      )}
+      {!!files.length && (
+        <section
+          ref={filesSection}
+          tabIndex={-1}
+          aria-label={t("team.deliverables")}
+        >
+          <h3>{t("team.deliverables")}</h3>
+          {files.map((file) => (
+            <TeamFileCard
+              key={file.path || file.url}
+              file={file}
+              onFile={onFile}
+            />
+          ))}
+        </section>
+      )}
+      {!!sources.length && (
+        <section aria-label={t("team.sources")}>
+          <h3>{t("team.sources")}</h3>
+          {sources.map((source) => (
+            <a
+              key={source.url}
+              className={styles.source}
+              href={source.url}
+              target="_blank"
+              rel="noreferrer"
+            >
+              <Link aria-hidden />
+              <span>{source.title}</span>
+            </a>
+          ))}
+        </section>
+      )}
+      {empty && <Inbox role="img" aria-label={t("team.noOutputs")} />}
+    </div>
+  );
+  if (bare) return sections;
   return (
     <aside
       className={styles.panel}
@@ -166,93 +256,7 @@ export function TeamSidePanel({
         <h2>{t("team.sidePanel")}</h2>
         <IconButton icon={X} label={t("team.hidePanel")} onClick={onClose} />
       </header>
-      <div className={empty ? styles.empty : styles.sections}>
-        {!!pins.length && (
-          <section aria-label={t("team.pinned")}>
-            <h3>{t("team.pinned")}</h3>
-            {pins.map((message) => (
-              <button
-                key={message.id}
-                type="button"
-                className={styles.pin}
-                aria-label={
-                  message.preview || message.text || t("team.message")
-                }
-                data-pin-id={message.id}
-                onClick={() => onLocate(message.id)}
-              >
-                <Pin aria-hidden />
-                <span>
-                  {message.text && (
-                    <span>{message.preview || message.text}</span>
-                  )}
-                  {conversationOutputs([message]).files.map((file) => (
-                    <span key={file.path || file.url}>
-                      <FileText aria-hidden />
-                      {file.name}
-                    </span>
-                  ))}
-                </span>
-                <ArrowUpRight aria-hidden />
-              </button>
-            ))}
-          </section>
-        )}
-        {progress.length > 0 && (
-          <section aria-label={t("team.progress")}>
-            <h3>{t("team.progress")}</h3>
-            {progress.map(({ member, messageId, status }) => (
-              <button
-                key={member.id}
-                type="button"
-                className={styles.progress}
-                onClick={() => onLocate(messageId)}
-              >
-                <MemberAvatar member={member} size="sm" />
-                <span>{memberName(member, t)}</span>
-                <span className={styles.state}>
-                  {t(`team.status.${status}`)}
-                </span>
-                <ArrowUpRight aria-hidden />
-              </button>
-            ))}
-          </section>
-        )}
-        {!!files.length && (
-          <section
-            ref={filesSection}
-            tabIndex={-1}
-            aria-label={t("team.deliverables")}
-          >
-            <h3>{t("team.deliverables")}</h3>
-            {files.map((file) => (
-              <TeamFileCard
-                key={file.path || file.url}
-                file={file}
-                onFile={onFile}
-              />
-            ))}
-          </section>
-        )}
-        {!!sources.length && (
-          <section aria-label={t("team.sources")}>
-            <h3>{t("team.sources")}</h3>
-            {sources.map((source) => (
-              <a
-                key={source.url}
-                className={styles.source}
-                href={source.url}
-                target="_blank"
-                rel="noreferrer"
-              >
-                <Link aria-hidden />
-                <span>{source.title}</span>
-              </a>
-            ))}
-          </section>
-        )}
-        {empty && <Inbox role="img" aria-label={t("team.noOutputs")} />}
-      </div>
+      {sections}
     </aside>
   );
 }

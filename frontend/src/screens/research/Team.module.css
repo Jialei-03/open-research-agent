@@ -36,8 +36,12 @@
   margin-left: auto;
 }
 .switcher {
+  display: flex;
   flex: 1;
+  align-items: center;
+  gap: var(--ui-space-2);
   min-width: 0;
+  padding-left: var(--ui-space-4);
 }
 .switcher > button {
   color: var(--ui-fg);

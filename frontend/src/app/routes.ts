@@ -63,6 +63,7 @@ export type AppRoute =
       item?: string;
       redirect?: string;
     }
+  | { screen: "inbox"; workspaceId?: string; redirect?: string }
   | { screen: "open"; url: string; redirect?: string }
   | { screen: "reader"; reader: ReaderRoute; redirect?: string };
 
@@ -157,6 +158,11 @@ export function parseAppRoute(hash: string): AppRoute {
           full: params.get("full") === "1",
         }
       : { screen: "new-research", redirect: "new" };
+  }
+  if (path === "inbox") {
+    const workspaceId =
+      new URLSearchParams(hash.split("?")[1] || "").get("workspace") || "";
+    return { screen: "inbox", ...(uuid(workspaceId) ? { workspaceId } : {}) };
   }
   if (path === "new") {
     const params = new URLSearchParams(hash.split("?")[1] || "");

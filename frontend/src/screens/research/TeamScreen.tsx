@@ -57,7 +57,7 @@ import { Prose } from "./talk/ThreadView";
 import { RunTurn, SummaryLine, Trail } from "./process/Process";
 import { summary } from "./process/model";
 import { ResearchProject } from "./ResearchProject";
-import { TeamFilePreview } from "./TeamFilePreview";
+import { TeamRightPanel, type PanelTab } from "./TeamRightPanel";
 import { TeamInbox } from "./TeamActivity";
 import { TeamWorkScreen } from "./TeamWork";
 import { TeamMemberCard, ColleagueStatus } from "./TeamMemberCard";
@@ -148,6 +148,8 @@ export function TeamScreen({
     }
   });
   const [fileRequest, setFileRequest] = useState(0);
+  const [panelTab, setPanelTab] = useState<PanelTab>("duty");
+  const [panelExpanded, setPanelExpanded] = useState(false);
   const [locateMessage, setLocateMessage] = useState("");
   const [locateRequest, setLocateRequest] = useState(0);
   const [conversation, setConversation] = useState<{
@@ -245,7 +247,14 @@ export function TeamScreen({
     },
     [channel?.id],
   );
-  const panelVisible = panelOpen && !!channel && !threadId && !file;
+  const panelVisible = panelOpen && !!channel && !threadId;
+  // A file opens in the right panel's files tab, as coding tools open theirs.
+  const openFile = (path: string) => {
+    setFile(path);
+    setPanelTab("files");
+    togglePanel(true);
+    if (threadId && channel) go(teamHash(id, channel.id));
+  };
   const participants = team?.members.filter((m) => !m.deleted) || [];
   const humanCount = participants.filter((m) => m.role === "human").length;
   const agentCount = participants.filter(
@@ -306,7 +315,7 @@ export function TeamScreen({
                 heading
                 team={team}
                 member={directMember}
-                onFile={setFile}
+                onFile={openFile}
               >
                 <MemberAvatar member={directMember} size="sm" />
                 {title}
@@ -359,6 +368,7 @@ export function TeamScreen({
                     label={t("team.files")}
                     onClick={() => {
                       setFile("");
+                      setPanelTab("files");
                       togglePanel(true);
                       setFileRequest((n) => n + 1);
                       if (threadId) go(teamHash(id, channel.id));
@@ -374,7 +384,6 @@ export function TeamScreen({
                       togglePanel(!panelVisible);
                       if (!panelVisible && threadId)
                         go(teamHash(id, channel.id));
-                      if (!panelVisible) setFile("");
                     }}
                   />
                 </>
@@ -439,7 +448,7 @@ export function TeamScreen({
               openThread={openThread}
               onReference={openReference}
               fork={fork}
-              onFile={setFile}
+              onFile={openFile}
               onConversation={receiveConversation}
               onLocate={setLocateMessage}
               locateId={!threadId ? locateMessage : undefined}
@@ -461,45 +470,62 @@ export function TeamScreen({
         </section>
       )}
       {team && channel && panelVisible && (
-        <TeamSidePanel
+        <TeamRightPanel
           team={team}
           messages={
             conversation.channelId === channel.id ? conversation.messages : []
           }
-          deliveries={
-            conversation.channelId === channel.id ? conversation.deliveries : []
-          }
-          onFile={setFile}
-          onClose={() => togglePanel(false)}
-          fileRequest={fileRequest}
-          onLocate={(messageId) => {
-            const row = [
-              ...(channelElement.current?.querySelectorAll<HTMLElement>(
-                "[data-message-id]",
-              ) || []),
-            ].find((el) => el.dataset.messageId === messageId);
-            row?.scrollIntoView({ block: "center", behavior: "smooth" });
-            row?.focus({ preventScroll: true });
-            if (!row) {
-              const message = conversation.messages.find(
-                (m) => m.id === messageId,
-              );
-              if (message?.thread_id) {
-                setLocateMessage(messageId);
-                go(teamHash(id, channel.id, message.thread_id));
-              }
-            }
-          }}
-        />
-      )}
-      {file && (
-        <TeamFilePreview
-          workspace={id}
+          tab={panelTab}
+          onTab={setPanelTab}
           path={file}
-          onClose={() => setFile("")}
+          onPath={setFile}
+          expanded={panelExpanded}
+          onExpand={setPanelExpanded}
+          onClose={() => togglePanel(false)}
+          onMember={(member) => {
+            const dm = team.channels.find((c) => c.member_id === member.id);
+            if (dm) go(teamHash(id, dm.id));
+          }}
+          outputs={
+            <TeamSidePanel
+              bare
+              team={team}
+              messages={
+                conversation.channelId === channel.id
+                  ? conversation.messages
+                  : []
+              }
+              deliveries={
+                conversation.channelId === channel.id
+                  ? conversation.deliveries
+                  : []
+              }
+              onFile={openFile}
+              onClose={() => togglePanel(false)}
+              fileRequest={fileRequest}
+              onLocate={(messageId) => {
+                const row = [
+                  ...(channelElement.current?.querySelectorAll<HTMLElement>(
+                    "[data-message-id]",
+                  ) || []),
+                ].find((el) => el.dataset.messageId === messageId);
+                row?.scrollIntoView({ block: "center", behavior: "smooth" });
+                row?.focus({ preventScroll: true });
+                if (!row) {
+                  const message = conversation.messages.find(
+                    (m) => m.id === messageId,
+                  );
+                  if (message?.thread_id) {
+                    setLocateMessage(messageId);
+                    go(teamHash(id, channel.id, message.thread_id));
+                  }
+                }
+              }}
+            />
+          }
         />
       )}
-      {!file && team && channel && threadId && (
+      {team && channel && threadId && (
         <section
           className={styles.thread}
           data-full={full || undefined}
@@ -532,7 +558,7 @@ export function TeamScreen({
             openThread={openThread}
             onReference={openReference}
             fork={fork}
-            onFile={setFile}
+            onFile={openFile}
             go={go}
             locateId={locateMessage}
             locateRequest={locateRequest}

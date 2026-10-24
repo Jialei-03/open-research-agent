@@ -1,6 +1,15 @@
 /** Every sidebar entry belongs to one DOM scope; smoke tests visit each scope. */
 export const PLACES = {
-  rail: ["collapse", "research", "materials", "tasks", "customize", "settings"],
+  rail: [
+    "collapse",
+    "all-projects",
+    "project",
+    "add-project",
+    "materials",
+    "tasks",
+    "customize",
+    "settings",
+  ],
   account: ["sign-out"],
   hosted: [
     "hosted-collapse",
@@ -12,14 +21,7 @@ export const PLACES = {
     "hosted-models",
     "hosted-settings",
   ],
-  research: [
-    "workspace",
-    "search",
-    "new-research",
-    "activity",
-    "work",
-    "members",
-  ],
+  research: ["workspace", "project-menu", "search", "inbox", "board"],
   researches: [
     "research-new",
     "research-row",
@@ -28,14 +30,14 @@ export const PLACES = {
   ],
   empty: ["create-project"],
   attention: ["attention", "attention-item"],
-  messages: [
-    "messages",
+  groups: [
+    "groups",
     "create-channel",
     "conversation",
-    "messages-more",
-    "messages-less",
+    "groups-more",
+    "groups-less",
   ],
-  team: ["team-settings"],
+  dms: ["dms", "add-member", "dm", "dms-more", "dms-less"],
   materials: ["import", "all", "reading", "unread", "read", "discover"],
   recent: ["recent", "recent-paper", "recent-more", "recent-less"],
   customize: [

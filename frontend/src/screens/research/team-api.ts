@@ -513,3 +513,44 @@ export const remindTeamMessage = (
     `${base(id)}/channels/${encodeURIComponent(message.channel_id)}/messages/${encodeURIComponent(message.id)}/reminders`,
     { remind_at },
   );
+
+export interface TeamFileEntry {
+  name: string;
+  path: string;
+  type: "dir" | "file" | "link";
+  size: number;
+  modified: number;
+}
+export interface TeamFile {
+  name: string;
+  path: string;
+  kind: string;
+  truncated: boolean;
+  content: string;
+}
+export interface TeamFileChange {
+  commit: string;
+  at: string;
+  added: number;
+  removed: number;
+  author: "member" | "researcher" | "other";
+  member_id?: string | null;
+  name?: string;
+  message_id?: string;
+  channel_id?: string;
+}
+export const listTeamFiles = (id: string, path = "") =>
+  api<{ path: string; entries: TeamFileEntry[]; truncated: boolean }>(
+    `${base(id)}/files?path=${encodeURIComponent(path)}`,
+  );
+export const readTeamFile = (id: string, path: string) =>
+  api<TeamFile>(`${base(id)}/file?path=${encodeURIComponent(path)}`);
+export const saveTeamFile = (id: string, path: string, content: string) =>
+  send(`${base(id)}/file`, { path, content }, "PUT") as Promise<{
+    path: string;
+    modified: number;
+  }>;
+export const teamFileHistory = (id: string, path: string) =>
+  api<TeamFileChange[]>(
+    `${base(id)}/file/history?path=${encodeURIComponent(path)}`,
+  );

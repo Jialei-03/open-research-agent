@@ -36,6 +36,7 @@
   --ui-danger-text: #b42318; /* error text */
   --ui-success-text: #12773d; /* success, finished ticks */
   --ui-warning-text: #8a5a00; /* warnings */
+  --ui-info-text: #1c63bf; /* work in progress */
 
   /* The paper being read */
   --ui-highlight: rgba(250, 204, 21, 0.32); /* a marker pen */
@@ -217,6 +218,7 @@
   --ui-danger-text: #ff8b8b;
   --ui-success-text: #69d98d;
   --ui-warning-text: #f0b450;
+  --ui-info-text: #80b6fb;
 
   --ui-highlight: rgba(234, 179, 8, 0.28);
   --ui-selection: rgba(128, 182, 251, 0.32);

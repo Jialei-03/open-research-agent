@@ -10,6 +10,7 @@ from sqlalchemy import func, select
 
 from . import research_team as team
 from . import team_members as members
+from . import research_repo
 from .models import AgentRun, TeamChannel, TeamDelivery, TeamMember, TeamMessage
 from .schemas import Strict
 from .team_budgets import TeamBudget
@@ -863,6 +864,38 @@ def install_team_routes(app, settings, db, auth, workspace_of):
         except (ValueError, research_repo.GitError) as error:
             raise HTTPException(409, str(error)) from None
         return team.message_out(d, message)
+
+    @app.get(base + "/files")
+    def list_team_files(id: str, path: str = "", a=Depends(auth), d=Depends(db)):
+        """A folder of the project, for the right panel's file tree."""
+        from .team_files import list_folder
+        from .team_workspace import workdir
+
+        workspace = workspace_of(d, id, a)
+        return list_folder(workdir(settings, workspace), path)
+
+    @app.put(base + "/file")
+    def save_team_file(id: str, body: dict, a=Depends(auth), d=Depends(db)):
+        """A text file the researcher edited in the right panel."""
+        from .team_files import save_file
+        from .team_workspace import workdir
+
+        workspace = workspace_of(d, id, a)
+        if not isinstance(body.get("path"), str) or not isinstance(body.get("content"), str):
+            raise HTTPException(422, "需要 path 和 content / path and content are required")
+        try:
+            return save_file(workdir(settings, workspace), body["path"], body["content"])
+        except research_repo.GitError as error:
+            raise HTTPException(409, str(error)) from None
+
+    @app.get(base + "/file/history")
+    def team_file_history(id: str, path: str, a=Depends(auth), d=Depends(db)):
+        """Who changed a file: members' runs and the researcher's own saves."""
+        from .team_files import history
+        from .team_workspace import workdir
+
+        workspace = workspace_of(d, id, a)
+        return history(d, workdir(settings, workspace), path)
 
     @app.get(base + "/file")
     def read_team_file(

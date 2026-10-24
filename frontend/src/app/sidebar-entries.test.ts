@@ -18,7 +18,9 @@ describe("sidebar entry registry", () => {
   it("keeps the rail independent of sidebar contents", () => {
     expect(PLACES.rail).toEqual([
       "collapse",
-      "research",
+      "all-projects",
+      "project",
+      "add-project",
       "materials",
       "tasks",
       "customize",
@@ -28,11 +30,10 @@ describe("sidebar entry registry", () => {
     expect(PLACES.rail).not.toContain("search");
     expect(PLACES.research).toEqual([
       "workspace",
+      "project-menu",
       "search",
-      "new-research",
-      "activity",
-      "work",
-      "members",
+      "inbox",
+      "board",
     ]);
   });
 });

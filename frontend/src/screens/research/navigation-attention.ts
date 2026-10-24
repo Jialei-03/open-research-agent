@@ -19,6 +19,7 @@ export function needsYou(
       )
       .map((message) => ({
         id: `message:${message.workspace_id}:${message.id}`,
+        workspaceId: message.workspace_id,
         title: message.text,
         at: message.created_at,
         hash: teamHash(
@@ -36,6 +37,7 @@ export function needsYou(
       )
       .map((research) => ({
         id: `research:${research.id}`,
+        workspaceId: research.workspace_id,
         title: research.title || research.question,
         at: research.updated_at || "",
         hash: teamHash(research.workspace_id, "", `research:${research.id}`),

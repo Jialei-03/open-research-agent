@@ -32,15 +32,15 @@ describe("sidebar pagination", () => {
   });
 
   it("restores validated limits separately per owner, project and list", () => {
-    const key = sidebarPageKey("owner", "project", "messages");
+    const key = sidebarPageKey("owner", "project", "groups");
     const saved = new Map([[key, "28"]]);
     vi.stubGlobal("localStorage", {
       getItem: (key: string) => saved.get(key) ?? null,
     });
     expect(readSidebarPage(key, MESSAGE_FIRST)).toBe(28);
     for (const other of [
-      sidebarPageKey("other", "project", "messages"),
-      sidebarPageKey("owner", "other", "messages"),
+      sidebarPageKey("other", "project", "groups"),
+      sidebarPageKey("owner", "other", "groups"),
       sidebarPageKey("owner", "project", "recent"),
     ])
       expect(readSidebarPage(other, MESSAGE_FIRST)).toBe(MESSAGE_FIRST);
@@ -63,7 +63,7 @@ describe("sidebar pagination", () => {
       for (const count of [1, 20]) {
         const html = render(
           createElement(SidebarPagination, {
-            list: "messages",
+            list: "groups",
             first: 8,
             limit: 28,
             hidden: count,
@@ -73,12 +73,12 @@ describe("sidebar pagination", () => {
         expect(html).toContain(
           locale === "zh" ? `再显示 ${count} 个` : `Show ${count} more`,
         );
-        expect(html).toContain('data-id="messages-less"');
+        expect(html).toContain('data-id="groups-less"');
       }
       expect(
         render(
           createElement(SidebarPagination, {
-            list: "messages",
+            list: "groups",
             first: 8,
             limit: 8,
             hidden: 0,
@@ -88,15 +88,15 @@ describe("sidebar pagination", () => {
       ).toBe("");
       const last = render(
         createElement(SidebarPagination, {
-          list: "messages",
+          list: "groups",
           first: 8,
           limit: 28,
           hidden: 0,
           choose() {},
         }),
       );
-      expect(last).not.toContain('data-id="messages-more"');
-      expect(last).toContain('data-id="messages-less"');
+      expect(last).not.toContain('data-id="groups-more"');
+      expect(last).toContain('data-id="groups-less"');
     });
 
     it(`${locale} keeps the open paper beyond the first five recent papers`, () => {

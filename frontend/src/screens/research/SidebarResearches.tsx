@@ -1,4 +1,4 @@
-import { Plus } from "lucide-react";
+import { Plus, Sparkle } from "lucide-react";
 import { useContext } from "react";
 import { AppActions } from "../../app/AppSidebar";
 import { parseAppRoute } from "../../app/routes";
@@ -16,6 +16,7 @@ import { IconButton, Spinner } from "../../ui";
 import type { NavigationResearch } from "./navigation-api";
 import { useResearchNavigation } from "./ResearchNavigation";
 import { statusOf } from "./status";
+import { threadDate } from "./team-model";
 import nav from "./TeamNavigation.module.css";
 
 /**
@@ -32,7 +33,7 @@ export function SidebarResearches({
   hash: string;
   go(hash: string): void;
 }) {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const { owner = "" } = useContext(AppActions);
   const { data } = useResearchNavigation();
   const [limit, choose] = useSidebarPage(
@@ -75,37 +76,60 @@ export function SidebarResearches({
           onClick={() => go(newHash)}
         />
       </div>
-      <div className={nav.researchList}>
+      <div className={nav.conversations}>
         {rows.map((r) => {
           const target = `research/${r.id}`;
           return (
             <a
               key={r.id}
-              className={nav.researchRow}
+              className={nav.conversation}
               data-id={sidebarId("research-row")}
               href={`#${target}`}
               title={r.question}
+              aria-label={r.title || r.question}
               aria-current={r.id === currentId ? "page" : undefined}
               onClick={followLink(go, target)}
             >
-              <span>{r.title || r.question}</span>
-              {r.working ? (
-                <span
-                  className={nav.researchState}
-                  role="img"
-                  aria-label={t("research.status.running")}
-                >
-                  <Spinner size={14} />
+              <span className={nav.researchMark} aria-hidden="true">
+                <Sparkle size={15} />
+              </span>
+              <span className={nav.content}>
+                <span className={nav.line}>
+                  <span className={nav.name}>{r.title || r.question}</span>
+                  <time dateTime={r.updated_at}>
+                    {threadDate(
+                      r.updated_at,
+                      locale,
+                      new Date(),
+                      "conversation",
+                    )}
+                  </time>
                 </span>
-              ) : waiting(r) ? (
-                <small>{t("sidebar.waiting")}</small>
-              ) : r.unread ? (
-                <span
-                  className={nav.researchDot}
-                  role="img"
-                  aria-label={t("research.unread")}
-                />
-              ) : null}
+                <span className={nav.line}>
+                  <span
+                    className={nav.preview}
+                    data-working={r.working ? true : undefined}
+                    data-waiting={waiting(r) || undefined}
+                  >
+                    {r.working ? (
+                      <>
+                        <Spinner size={14} /> {t(statusOf(r).key)}
+                      </>
+                    ) : waiting(r) ? (
+                      t("sidebar.waiting")
+                    ) : (
+                      r.conclusion || r.said || t(statusOf(r).key)
+                    )}
+                  </span>
+                  {r.unread && !r.working && !waiting(r) && (
+                    <span
+                      className={nav.researchDot}
+                      role="img"
+                      aria-label={t("research.unread")}
+                    />
+                  )}
+                </span>
+              </span>
             </a>
           );
         })}

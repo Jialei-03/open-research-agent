@@ -68,22 +68,24 @@ const render = (value = team, locale: "zh" | "en" = "zh") =>
   );
 
 describe("team conversation navigation", () => {
-  it("merges channels and DMs by activity and excludes deleted or missing members", () => {
+  it("lists groups and DMs apart, each by activity, without deleted or missing members", () => {
     const html = render();
-    const list = html.split('aria-labelledby="team-conversations"')[1];
-    expect(
-      [...list.matchAll(/href="#team\/workspace\/([^"?]+)"/g)].map(
-        (match) => match[1],
-      ),
-    ).toEqual([
+    const ids = (section: string) =>
+      [
+        ...html
+          .split(`aria-labelledby="${section}"`)[1]
+          .split('data-sidebar-place="dms"')[0]
+          .matchAll(/href="#team\/workspace\/([^"?]+)"/g),
+      ].map((match) => match[1]);
+    expect(ids("team-groups")).toEqual([newChannel, "channel-old"]);
+    expect(ids("team-dms")).toEqual([
       "empty-dm",
       "dm-5",
-      newChannel,
       "dm-4",
       "dm-3",
       "dm-2",
       "dm-1",
-      "channel-old",
+      "dm-0",
     ]);
     expect(html).toContain('aria-label="channel-new" aria-current="page"');
     expect(html).not.toContain("missing-member");
@@ -126,18 +128,18 @@ describe("team conversation navigation", () => {
     });
     it(`${locale} has fixed navigation and no duplicate member shortcuts`, () => {
       const html = render(team, locale);
-      for (const id of ["activity", "work", "members", "team-settings"])
+      for (const id of ["inbox", "board"])
         expect(html).toContain(`data-id="${id}"`);
+      for (const id of ["activity", "work", "members", "team-settings"])
+        expect(html).not.toContain(`data-id="${id}"`);
       expect(html).not.toContain('aria-label="常用成员"');
       expect(html).not.toContain('aria-label="Frequent members"');
       expect((html.match(/href="#team\/workspace\/dm-5"/g) || []).length).toBe(
         1,
       );
-      expect(html).toContain('data-id="messages-more"');
-      expect(html).toContain(locale === "zh" ? "再显示 1 个" : "Show 1 more");
       expect(html).not.toContain('data-id="threads"');
       expect(render({ ...team, channels: [] }, locale)).toContain(
-        'data-id="activity"',
+        'data-id="inbox"',
       );
     });
 
@@ -164,25 +166,18 @@ describe("team conversation navigation", () => {
       );
       expect(html).not.toContain("Preview channel-new");
       expect(html).not.toContain("Preview dm-0");
-      for (const count of [7, 42])
+      for (const count of [42, 1])
         expect(html).toContain(
           `aria-label="${locale === "zh" ? `${count} 条未读` : `${count} unread`}">${count}</span>`,
         );
       expect(html).toContain('data-status="working"');
       expect(html).toContain('aria-label="channel-new"');
-      expect(html).toContain(locale === "zh" ? "消息" : "Messages");
+      expect(html).toContain(locale === "zh" ? "群聊" : "Groups");
+      expect(html).toContain(locale === "zh" ? "私聊" : "Direct messages");
       expect(html).toContain(
         locale === "zh"
           ? 'aria-label="新建频道"'
           : 'aria-label="Create channel"',
-      );
-      const activity = render({ ...team, activity_unread: 19 }, locale);
-      expect(activity).toContain(t("team.activity"));
-      expect(activity).toContain(
-        `aria-label="${t("team.unreadCount", { count: 19 })}">19</span>`,
-      );
-      expect(activity).not.toContain(
-        `aria-label="${t("team.unreadCount", { count: 7 })}">7</span>`,
       );
     });
     it(`${locale} shows a working member's status in conversation previews`, () => {

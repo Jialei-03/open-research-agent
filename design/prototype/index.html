@@ -1,0 +1,616 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>ORA 界面方案 v1</title>
+<style>
+:root{
+  --shell:#f5f4ef; --card:#fdfcf9; --inset:#efede7; --elev:#fff;
+  --fg:#1f1e1c; --fg1:#4a4743; --fg2:#6f6b66; --fg3:#9a958f;
+  --edge:rgba(31,30,28,.10); --edge2:rgba(31,30,28,.16); --hover:rgba(31,30,28,.05); --sel:rgba(31,30,28,.08);
+  --clay:#c96442; --blue:#2f6fd0; --bluebg:#e8eff9; --green:#2e7d4f; --greenbg:#e6f2ea; --amber:#9a6a00; --amberbg:#fbf0d6; --red:#b3392f; --redbg:#f8e5e2;
+  --serif:"Songti SC","Source Han Serif SC",Georgia,serif; --mono:"JetBrains Mono",ui-monospace,Menlo,monospace;
+}
+*{box-sizing:border-box} body{margin:0;background:#e9e7e1;font:13px/1.5 -apple-system,"PingFang SC","Inter",sans-serif;color:var(--fg)}
+.tabs{position:sticky;top:0;z-index:5;display:flex;gap:6px;flex-wrap:wrap;padding:10px 16px;background:#e9e7e1;border-bottom:1px solid var(--edge)}
+.tabs button{font:inherit;border:0;background:transparent;padding:6px 12px;border-radius:999px;color:var(--fg1);cursor:pointer}
+.tabs button.on{background:var(--fg);color:#fff}
+.note{max-width:1440px;margin:12px auto 0;padding:0 16px;color:var(--fg1);font-size:13px}
+.frame{width:1440px;height:900px;margin:12px auto 40px;background:var(--shell);display:flex;padding:8px 8px 8px 0;border-radius:12px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.08)}
+.screen{display:none}.screen.on{display:block}
+.rail{width:52px;display:flex;flex-direction:column;align-items:center;gap:4px;padding:8px 0 12px}
+.ri{width:36px;height:36px;border-radius:10px;display:grid;place-items:center;color:var(--fg2);position:relative}
+.ri.on{background:var(--card);color:var(--fg);box-shadow:0 0 0 1px var(--edge),0 1px 2px rgba(0,0,0,.05)}
+.ri .dot{position:absolute;top:6px;right:6px;width:7px;height:7px;border-radius:50%;background:var(--red)}
+.side{width:264px;display:flex;flex-direction:column;padding:0 8px}
+.top{height:52px;display:flex;align-items:center;gap:8px;padding:0 4px 0 8px}
+.proj{font-weight:600;font-size:14px;display:flex;align-items:center;gap:6px}
+.sp{flex:1}
+.ib{width:28px;height:28px;border-radius:8px;display:grid;place-items:center;color:var(--fg2)}
+.nav{height:34px;display:flex;align-items:center;gap:10px;padding:0 10px;border-radius:8px;font-size:14px;color:var(--fg1)}
+.nav.on{background:var(--sel);color:var(--fg)}
+.cnt{margin-left:auto;font-size:12px;color:var(--fg3)}
+.pill{margin-left:auto;font-size:11px;padding:1px 7px;border-radius:999px;background:var(--amberbg);color:var(--amber)}
+.sh{height:26px;display:flex;align-items:center;padding:0 6px 0 10px;margin-top:14px;color:var(--fg3);font-size:12px;letter-spacing:.02em}
+.row{display:flex;align-items:center;gap:8px;padding:6px 10px;border-radius:8px;min-height:44px}
+.row.on{background:var(--sel)}
+.row .t{flex:1;min-width:0}
+.row .n{font-size:13px;color:var(--fg);display:flex;gap:6px;align-items:baseline}
+.row .p{font-size:12px;color:var(--fg2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.row time{font-size:11px;color:var(--fg3);margin-left:auto}
+.row .w{color:var(--blue)}
+.av{width:28px;height:28px;border-radius:50%;display:grid;place-items:center;font-size:12px;font-weight:600;flex:none;position:relative}
+.av.sm{width:22px;height:22px;font-size:10px}.av.lg{width:44px;height:44px;font-size:16px}
+.av .s{position:absolute;right:-1px;bottom:-1px;width:9px;height:9px;border-radius:50%;border:2px solid var(--shell)}
+.s.work{background:var(--blue)}.s.idle{background:#b9b4ac}.s.wait{background:#d49a1d}.s.off{background:#ddd}
+.a1{background:#e8e2f8;color:#4b3d8f}.a2{background:#dff1ea;color:#1d6b52}.a3{background:#fbe7dc;color:#8a3d1d}.a4{background:#e3eefb;color:#1d4f8a}.a5{background:#f6e5ee;color:#86324f}.me{background:#2b2a27;color:#fff}
+.hash{width:28px;height:28px;border-radius:8px;background:var(--inset);display:grid;place-items:center;color:var(--fg2);font-weight:600;flex:none}
+.cards{flex:1;display:flex;gap:8px;min-width:0}
+.main{flex:1;background:var(--card);border-radius:16px;box-shadow:0 0 0 1px var(--edge),0 1px 2px rgba(0,0,0,.04);display:flex;flex-direction:column;min-width:0;overflow:hidden}
+.panel{width:340px;background:var(--card);border-radius:16px;box-shadow:0 0 0 1px var(--edge),0 1px 2px rgba(0,0,0,.04);display:flex;flex-direction:column;overflow:hidden}
+.head{height:52px;display:flex;align-items:center;gap:10px;padding:0 12px 0 20px;border-bottom:1px solid var(--edge)}
+.head h1{font-size:14px;font-weight:600;margin:0}
+.head .m{font-size:12px;color:var(--fg2)}
+.flow{flex:1;overflow:hidden;padding:16px 0}
+.col{width:720px;margin:0 auto;display:flex;flex-direction:column;gap:14px}
+.msg{display:flex;gap:10px}
+.msg .b{flex:1;min-width:0}
+.who{font-size:13px;font-weight:600;display:flex;gap:8px;align-items:baseline}
+.who span{font-weight:400;font-size:11px;color:var(--fg3)}
+.txt{font-size:14.5px;line-height:1.7;color:var(--fg)}
+.mine{align-self:flex-end;max-width:70%;background:var(--bluebg);border-radius:18px 18px 6px 18px;padding:9px 14px;font-size:14.5px;line-height:1.6}
+.mine b{color:var(--blue);font-weight:500}
+.card{background:var(--elev);border-radius:12px;box-shadow:0 0 0 1px var(--edge),0 1px 2px rgba(0,0,0,.04);padding:12px 14px}
+.chip{display:inline-flex;align-items:center;gap:5px;height:22px;padding:0 8px;border-radius:999px;font-size:11.5px;background:var(--inset);color:var(--fg1)}
+.chip.run{background:var(--bluebg);color:var(--blue)}.chip.ok{background:var(--greenbg);color:var(--green)}.chip.wait{background:var(--amberbg);color:var(--amber)}.chip.err{background:var(--redbg);color:var(--red)}
+.btn{display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 12px;border-radius:999px;font-size:12.5px;box-shadow:inset 0 0 0 1px var(--edge2);color:var(--fg);background:transparent}
+.btn.pri{background:var(--fg);color:#fff;box-shadow:none}
+.steps{margin:8px 0 0;padding:0;list-style:none;display:flex;flex-direction:column;gap:4px}
+.steps li{display:flex;gap:8px;align-items:center;font-size:12.5px;color:var(--fg1)}
+.steps li i{width:14px;text-align:center;font-style:normal;color:var(--fg3)}
+.steps li.d i{color:var(--green)}.steps li.n i{color:var(--blue)}
+.mono{font-family:var(--mono);font-size:12px}
+.file{display:flex;align-items:center;gap:8px;padding:6px 10px;border-radius:8px;background:var(--inset);font-size:12.5px;margin-top:6px}
+.file .x{margin-left:auto;color:var(--fg2);font-size:12px}
+.comp{width:720px;margin:0 auto 14px;background:var(--elev);border-radius:20px;box-shadow:0 0 0 1px var(--edge2),0 2px 4px rgba(0,0,0,.03),0 12px 28px -12px rgba(0,0,0,.12);padding:10px 10px 10px 14px}
+.comp .ph{min-height:40px;font-size:14.5px;color:var(--fg3);padding:4px 2px}
+.comp .bar{display:flex;align-items:center;gap:6px}
+.cc{height:30px;padding:0 10px;border-radius:999px;display:inline-flex;align-items:center;gap:6px;color:var(--fg1);font-size:12.5px}
+.send{width:34px;height:34px;border-radius:50%;background:var(--fg);color:#fff;display:grid;place-items:center;margin-left:auto}
+.ptabs{display:flex;gap:2px;padding:10px 12px;border-bottom:1px solid var(--edge)}
+.ptabs span{padding:4px 10px;border-radius:999px;font-size:12.5px;color:var(--fg2)}
+.ptabs span.on{background:var(--sel);color:var(--fg)}
+.pbody{flex:1;overflow:hidden;padding:12px 14px;display:flex;flex-direction:column;gap:14px}
+.ph3{font-size:12px;color:var(--fg3);margin-bottom:6px;display:flex;align-items:center}
+.desk{display:flex;gap:10px;align-items:flex-start;padding:8px;border-radius:10px}
+.desk:hover{background:var(--hover)}
+.desk .t{flex:1;min-width:0}
+.desk .nm{font-size:13px;font-weight:600;display:flex;gap:6px;align-items:center}
+.desk .st{font-size:12px;color:var(--fg2);margin-top:1px}
+.bar2{height:4px;border-radius:2px;background:var(--inset);margin-top:6px;overflow:hidden}.bar2 i{display:block;height:100%;background:var(--blue)}
+.brief{border-radius:12px;background:var(--inset);padding:12px 14px}
+.brief h4{margin:0 0 6px;font-size:13px}
+.brief li{font-size:13px;color:var(--fg1);margin:2px 0}
+.term{background:#1f1e1c;color:#e9e6df;border-radius:10px;padding:10px 12px;font-family:var(--mono);font-size:11.5px;line-height:1.6}
+.term .g{color:#8fd19e}.term .y{color:#e8c46b}.term .c{color:#9a958f}
+.map{display:flex;flex-direction:column;gap:4px}
+.node{font-size:12.5px;padding:5px 8px;border-radius:8px;display:flex;gap:6px;align-items:center}
+.node.l1{margin-left:0;font-weight:600}.node.l2{margin-left:14px}.node.l3{margin-left:28px}
+.tag{font-size:11px;padding:0 6px;border-radius:999px;margin-left:auto}
+.tag.ok{background:var(--greenbg);color:var(--green)}.tag.no{background:var(--redbg);color:var(--red)}.tag.run{background:var(--bluebg);color:var(--blue)}.tag.idle{background:var(--inset);color:var(--fg2)}
+.inbox .item{display:flex;gap:12px;padding:14px 16px;border-bottom:1px solid var(--edge)}
+.inbox .item .t{flex:1}
+.inbox h3{margin:0;font-size:14px}
+.inbox p{margin:3px 0 0;font-size:13px;color:var(--fg1)}
+.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+.mcard{background:var(--elev);border-radius:12px;box-shadow:0 0 0 1px var(--edge);padding:14px}
+.mcard .r{font-size:12.5px;color:var(--fg2);margin-top:6px}
+.serif{font-family:var(--serif);font-weight:400}
+.overlay{position:absolute;inset:0;background:rgba(20,20,18,.35);display:flex;align-items:center;justify-content:center;border-radius:16px}
+.dlg{width:520px;background:var(--elev);border-radius:24px;box-shadow:0 20px 60px rgba(0,0,0,.25);padding:22px 24px}
+.fld{border-radius:10px;box-shadow:inset 0 0 0 1px var(--edge2);padding:9px 12px;font-size:13.5px;color:var(--fg)}
+.lbl{font-size:12px;color:var(--fg2);margin:12px 0 6px}
+.k{font-size:11px;color:var(--fg3)}
+.rail{width:60px}
+.pt{width:38px;height:38px;border-radius:11px;display:grid;place-items:center;font-weight:600;font-size:14px;position:relative;cursor:pointer}
+.pt.on{box-shadow:0 0 0 2px var(--fg)}
+.pt .bd{position:absolute;right:-5px;top:-5px;min-width:16px;height:16px;padding:0 4px;border-radius:8px;background:#d49a1d;color:#fff;font-size:10px;display:grid;place-items:center;border:2px solid var(--shell)}
+.pt .wk{position:absolute;right:-3px;bottom:-3px;width:10px;height:10px;border-radius:50%;background:var(--blue);border:2px solid var(--shell)}
+.pt.all{background:var(--card);color:var(--fg1);box-shadow:0 0 0 1px var(--edge)}
+.pt.all.on{box-shadow:0 0 0 2px var(--fg)}
+.rsep{width:24px;height:1px;background:var(--edge2);margin:6px 0}
+.seg{display:flex;gap:2px;background:var(--inset);border-radius:999px;padding:2px;margin:0 2px 8px}
+.seg span{flex:1;text-align:center;padding:4px 0;border-radius:999px;font-size:12.5px;color:var(--fg2)}
+.seg span.on{background:var(--elev);color:var(--fg);box-shadow:0 0 0 1px var(--edge)}
+.col3{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;padding:16px 20px;align-items:start}
+.lane h4{margin:0 0 8px;font-size:12.5px;color:var(--fg2);font-weight:500;display:flex;gap:6px}
+.kc{background:var(--elev);border-radius:10px;box-shadow:0 0 0 1px var(--edge);padding:10px 12px;margin-bottom:8px;font-size:13px}
+.kc .m{display:flex;align-items:center;gap:6px;margin-top:8px;font-size:11.5px;color:var(--fg2)}
+.tree div{padding:3px 8px;border-radius:6px;font-size:12.5px;display:flex;gap:6px;color:var(--fg1)}
+.tree div.on{background:var(--sel);color:var(--fg)}
+.tree .g{margin-left:auto;font-size:11px}
+.ftabs{display:flex;gap:2px;padding:6px 10px;border-bottom:1px solid var(--edge)}
+.ftabs span{padding:4px 10px;border-radius:8px;font-size:12.5px;color:var(--fg2)}
+.ftabs span.on{background:var(--sel);color:var(--fg)}
+.code{font-family:var(--mono);font-size:12.5px;line-height:1.75;padding:12px 0}
+.code div{display:flex}.code i{width:44px;text-align:right;padding-right:14px;color:var(--fg3);font-style:normal}
+.code .add{background:rgba(46,125,79,.08)}
+.md h2{font-family:var(--serif);font-weight:400;font-size:22px;margin:0 0 10px}
+.md p,.md li{font-size:14px;line-height:1.75;color:var(--fg)}
+</style>
+</head>
+<body>
+<div class="tabs" id="tabs"></div>
+<div class="note" id="note"></div>
+
+<!-- 1 主界面：项目群 -->
+<section class="screen" data-name="1 打开就是群聊" data-note="打开 App 落在上次的会话，默认是项目群。最左栏是项目栏，侧栏顶部切换「消息 · 看板 · 文件」。顶部一块「晨报」只在你离开后有新进展时出现（按事件生成，不花模型钱）。你在群里 @谁 派活，消息变成一张会自己更新的「交办卡」。右侧「在岗」常驻：每个同事此刻在做什么，点一下就能旁观。">
+<div class="frame">
+ <div class="rail"></div>
+ <div class="side">
+  <div class="top" data-view="msg"></div>
+  <div class="nav"><span>⚑</span>待你决定<span class="pill">3</span></div>
+  <div class="sh">研究</div>
+  <div class="row"><div class="hash" style="color:var(--clay)">◈</div><div class="t"><div class="n">AdamW vs SGD<time>14:46</time></div><div class="p" style="color:var(--amber)">结论草稿等你确认</div></div></div>
+  <div class="row"><div class="hash" style="color:var(--clay)">◈</div><div class="t"><div class="n">MPS 上的数值问题<time>周四</time></div><div class="p">已得出结论</div></div></div>
+  <div class="sh">群聊</div>
+  <div class="row on"><div class="hash">#</div><div class="t"><div class="n">项目群<time>14:46</time></div><div class="p w">执行者 正在跑实验 · 第 3 轮</div></div></div>
+  <div class="row"><div class="hash">#</div><div class="t"><div class="n">文献讨论<time>昨天</time></div><div class="p">文献员：找到 3 篇，见 notes.md</div></div></div>
+  <div class="sh">私聊</div>
+  <div class="row"><div class="av a3">执<span class="s work"></span></div><div class="t"><div class="n">执行者<time>14:46</time></div><div class="p w">运行 python train.py · 4 分钟</div></div></div>
+  <div class="row"><div class="av a2">文<span class="s idle"></span></div><div class="t"><div class="n">文献员<time>11:20</time></div><div class="p">好的，我去查 warmup 的原始出处</div></div></div>
+  <div class="row"><div class="av a1">写<span class="s wait"></span></div><div class="t"><div class="n">写手<time>10:02</time></div><div class="p">等你确认结论口径</div></div></div>
+  <div class="row"><div class="av a4">导<span class="s idle"></span></div><div class="t"><div class="n">导师<time>昨天</time></div><div class="p">计划可以，止损条件再收紧一点</div></div></div>
+  <div class="row"><div class="av a5">审<span class="s off"></span></div><div class="t"><div class="n">审稿人<time>周五</time></div><div class="p">已暂停</div></div></div>
+ </div>
+ <div class="cards">
+  <div class="main">
+   <div class="head"><div class="hash" style="width:24px;height:24px">#</div><h1>项目群</h1><span class="m">6 位成员</span><div class="sp"></div><div class="ib">⌕</div><div class="ib">⋯</div></div>
+   <div class="flow"><div class="col">
+    <div class="brief"><h4>你离开后（昨晚 23:10 起）</h4><ul style="margin:0;padding-left:18px">
+     <li>执行者 完成 2 轮实验，AdamW 在 lr=1e-3 下领先 0.3pp</li>
+     <li>文献员 新增 3 篇论文到资料库</li>
+     <li><b style="color:var(--amber);font-weight:500">2 件等你决定</b>：结论口径、是否补跑 6 个种子</li></ul></div>
+    <div class="mine">@<b>执行者</b> 把 SGD 的学习率网格补到 0.3，三个种子，跑完把曲线发群里</div>
+    <div class="msg"><div class="av a3">执</div><div class="b"><div class="who">执行者<span>14:31</span></div>
+     <div class="card"><div style="display:flex;gap:8px;align-items:center"><b style="font-weight:600">交办 · SGD 学习率补到 0.3</b><span class="chip run">● 进行中 · 第 2/3 个种子</span><div class="sp"></div><span class="k">4 分 12 秒 · 38k tokens</span></div>
+      <div style="font-size:12.5px;color:var(--fg2);margin-top:4px">完成标准：3 个种子跑完，曲线图发到群里</div>
+      <ul class="steps"><li class="d"><i>✓</i>读 shared/plan.md</li><li class="d"><i>✓</i>种子 1：test_acc 0.9881</li><li class="n"><i>◐</i>运行 python train.py --opt sgd --lr 0.3 --seed 2</li><li><i>○</i>画曲线、发群</li></ul>
+      <div style="display:flex;gap:6px;margin-top:10px"><span class="btn">👁 旁观</span><span class="btn">插话</span><span class="btn">停止</span></div></div></div></div>
+    <div class="msg"><div class="av a2">文</div><div class="b"><div class="who">文献员<span>14:40</span></div><div class="txt">顺手查了一下，0.3 这个档在 Goyal et al. 2017 里也出现过，配合 warmup 才稳定。已放到资料库。</div>
+     <div class="file">📄 Accurate, Large Minibatch SGD (Goyal 2017)<span class="x">打开</span></div></div></div>
+   </div></div>
+   <div class="comp"><div class="ph">在群里说话，@ 某人就是派活…</div><div class="bar"><span class="cc">＋</span><span class="cc">@ 成员</span><span class="cc">◎ 完成标准</span><span class="send">↑</span></div></div>
+  </div>
+  <div class="panel">
+   <div class="ptabs"><span class="on">在岗</span><span>文件</span><span>变更</span><div class="sp"></div><span title="展开">⤢</span></div>
+   <div class="pbody">
+    <div><div class="ph3">正在工作 · 1</div>
+     <div class="desk"><div class="av a3">执<span class="s work"></span></div><div class="t"><div class="nm">执行者</div><div class="st">运行 python train.py · 种子 2/3</div><div class="bar2"><i style="width:55%"></i></div></div><span class="btn" style="height:24px;padding:0 8px">旁观</span></div></div>
+    <div><div class="ph3">等你 · 1</div>
+     <div class="desk"><div class="av a1">写<span class="s wait"></span></div><div class="t"><div class="nm">写手</div><div class="st">结论用「领先 0.3pp」还是「打平」？</div></div><span class="btn" style="height:24px;padding:0 8px">去回</span></div></div>
+    <div><div class="ph3">空闲 · 3</div>
+     <div class="desk"><div class="av a2">文<span class="s idle"></span></div><div class="t"><div class="nm">文献员</div><div class="st">上一件：找 warmup 出处 · 11:20 完成</div></div></div>
+     <div class="desk"><div class="av a4">导<span class="s idle"></span></div><div class="t"><div class="nm">导师</div><div class="st">上一件：审计划 · 昨天</div></div></div>
+     <div class="desk"><div class="av a5">审<span class="s off"></span></div><div class="t"><div class="nm">审稿人 <span class="chip">暂停</span></div><div class="st">不会被唤醒</div></div></div></div>
+    <div><div class="ph3">今天的花费</div><div style="font-size:13px;color:var(--fg1)">412k tokens · 实验 1 小时 08 分 · 问了你 3 次</div></div>
+   </div>
+  </div>
+ </div>
+</div>
+</section>
+
+<!-- 2 派活 -->
+<section class="screen" data-name="2 派活" data-note="派活就是在输入框里 @ 人。@ 之后输入框上方出现「交办」条：可选完成标准、预计用什么机器；发出去后同一条消息变成交办卡。也能一次 @ 多个人（各自一张卡），或者说「谁有空谁做」交给导师分配。">
+<div class="frame">
+ <div class="rail"></div>
+ <div class="side">
+  <div class="top" data-view="msg"></div>
+  <div class="nav"><span>⚑</span>待你决定<span class="pill">3</span></div>
+  <div class="sh">群聊</div>
+  <div class="row on"><div class="hash">#</div><div class="t"><div class="n">项目群<time>14:46</time></div><div class="p">执行者 正在跑实验 · 第 3 轮</div></div></div>
+  <div class="row"><div class="hash">#</div><div class="t"><div class="n">文献讨论<time>昨天</time></div><div class="p">文献员：找到 3 篇，见 notes.md</div></div></div>
+  <div class="sh">私聊</div>
+  <div class="row"><div class="av a3">执<span class="s work"></span></div><div class="t"><div class="n">执行者<time>14:46</time></div><div class="p w">运行 python train.py · 4 分钟</div></div></div>
+  <div class="row"><div class="av a2">文<span class="s idle"></span></div><div class="t"><div class="n">文献员<time>11:20</time></div><div class="p">好的</div></div></div>
+ </div>
+ <div class="cards"><div class="main" style="position:relative">
+  <div class="head"><div class="hash" style="width:24px;height:24px">#</div><h1>项目群</h1><span class="m">6 位成员</span></div>
+  <div class="flow"><div class="col" style="padding-top:220px">
+   <div class="txt" style="color:var(--fg2);text-align:center">…</div>
+  </div></div>
+  <div class="comp" style="padding-top:8px">
+   <div style="display:flex;gap:8px;align-items:center;padding:6px 8px 10px;border-bottom:1px solid var(--edge);margin-bottom:6px">
+    <span class="chip run">交办给</span><div class="av sm a2">文</div><b style="font-weight:600">文献员</b><span class="k">空闲</span>
+    <span class="cc" style="margin-left:12px">◎ 完成标准：<span style="color:var(--fg)">列出 5 篇，每篇一句结论</span></span>
+    <span class="cc">🖥 本机</span><div class="sp"></div><span class="k">Enter 发送 · 不 @ 就是普通聊天</span></div>
+   <div class="ph" style="color:var(--fg)">@文献员 找 5 篇讲 warmup 为什么有效的论文，每篇一句话结论，放到资料库</div>
+   <div class="bar"><span class="cc">＋</span><span class="cc">@ 成员</span><span class="send">↑</span></div>
+  </div>
+  <div style="position:absolute;left:calc(50% - 360px + 8px);bottom:150px;width:300px" class="card">
+   <div class="k" style="margin-bottom:6px">@ 谁</div>
+   <div class="desk" style="background:var(--sel)"><div class="av a2">文<span class="s idle"></span></div><div class="t"><div class="nm">文献员</div><div class="st">空闲 · 找文献、读论文</div></div></div>
+   <div class="desk"><div class="av a3">执<span class="s work"></span></div><div class="t"><div class="nm">执行者</div><div class="st">忙 · 前面 1 件</div></div></div>
+   <div class="desk"><div class="av a1">写<span class="s wait"></span></div><div class="t"><div class="nm">写手</div><div class="st">等你回复</div></div></div>
+   <div class="desk"><div class="av a4">导<span class="s idle"></span></div><div class="t"><div class="nm">导师</div><div class="st">让导师分配</div></div></div>
+  </div>
+ </div></div>
+</div>
+</section>
+
+<!-- 3 私聊 -->
+<section class="screen" data-name="3 私聊同事" data-note="和某个同事一对一。右侧变成他的「工位」：正在做的事、交办历史、最近产出、你给他的反馈（👍/👎 会进入他下次工作的上下文）。他的设定（agent 文件）也在这里看和改。">
+<div class="frame">
+ <div class="rail"></div>
+ <div class="side">
+  <div class="top" data-view="msg"></div>
+  <div class="nav"><span>⚑</span>待你决定<span class="pill">3</span></div>
+  <div class="sh">群聊</div>
+  <div class="row"><div class="hash">#</div><div class="t"><div class="n">项目群<time>14:46</time></div><div class="p">执行者 正在跑实验</div></div></div>
+  <div class="sh">私聊</div>
+  <div class="row on"><div class="av a3">执<span class="s work"></span></div><div class="t"><div class="n">执行者<time>14:46</time></div><div class="p w">运行 python train.py · 4 分钟</div></div></div>
+  <div class="row"><div class="av a2">文<span class="s idle"></span></div><div class="t"><div class="n">文献员<time>11:20</time></div><div class="p">好的</div></div></div>
+  <div class="row"><div class="av a1">写<span class="s wait"></span></div><div class="t"><div class="n">写手<time>10:02</time></div><div class="p">等你确认结论口径</div></div></div>
+ </div>
+ <div class="cards">
+  <div class="main">
+   <div class="head"><div class="av sm a3">执</div><h1>执行者</h1><span class="chip run">● 工作中</span><div class="sp"></div><div class="ib">⋯</div></div>
+   <div class="flow"><div class="col">
+    <div class="mine">今天 MPS 上那个崩溃你怎么看？是不是数值问题</div>
+    <div class="msg"><div class="av a3">执</div><div class="b"><div class="who">执行者<span>14:12</span></div><div class="txt">大概率是。lr=0.3 时 SGD 在 MPS 上第 2 个 epoch loss 变成 nan，同样配置在 CPU 上正常收敛到 0.9864。我把主对照挪到 CPU 上跑了，MPS 只做吞吐对比。要不要我写一个最小复现提给 PyTorch？</div>
+     <div style="display:flex;gap:4px;margin-top:6px;color:var(--fg3)"><span class="chip">👍</span><span class="chip">👎</span><span class="chip">↪ 转发</span></div></div></div>
+    <div class="mine">先不用，主线优先。跑完补种子再说</div>
+    <div class="msg"><div class="av a3">执</div><div class="b"><div class="who">执行者<span>14:13</span></div><div class="txt">收到。</div></div></div>
+   </div></div>
+   <div class="comp"><div class="ph">发消息给执行者…</div><div class="bar"><span class="cc">＋</span><span class="cc">◎ 完成标准</span><span class="send">↑</span></div></div>
+  </div>
+  <div class="panel">
+   <div class="ptabs"><span class="on">工位</span><span>设定</span><span>文件</span></div>
+   <div class="pbody">
+    <div style="display:flex;gap:12px;align-items:center"><div class="av lg a3">执</div><div><div style="font-weight:600;font-size:15px">执行者</div><div class="k">写代码、跑实验 · MiniMax-M3.1 · 本机</div></div></div>
+    <div><div class="ph3">正在做</div><div class="card" style="padding:10px 12px"><div style="font-size:13px;font-weight:600">SGD 学习率补到 0.3</div><div class="st" style="font-size:12px;color:var(--fg2)">种子 2/3 · 4 分 12 秒</div><div class="bar2"><i style="width:55%"></i></div><div style="display:flex;gap:6px;margin-top:8px"><span class="btn" style="height:26px">👁 旁观</span><span class="btn" style="height:26px">停止</span></div></div></div>
+    <div><div class="ph3">交办记录</div>
+     <div class="desk"><span class="chip ok">完成</span><div class="t"><div class="nm" style="font-weight:400">补跑 AdamW 6 个种子</div><div class="st">昨天 · 1 小时 02 分</div></div></div>
+     <div class="desk"><span class="chip err">失败</span><div class="t"><div class="nm" style="font-weight:400">MPS 上 lr=0.3</div><div class="st">今天 13:50 · nan</div></div></div></div>
+    <div><div class="ph3">最近产出</div><div class="file">📈 curves_sgd.png<span class="x">打开</span></div><div class="file">📄 results.csv<span class="x">打开</span></div></div>
+    <div><div class="ph3">你的反馈</div><div style="font-size:12.5px;color:var(--fg1)">👍 4 · 👎 1 —— 最近一条：「别再在 MPS 上跑主对照」</div></div>
+   </div>
+  </div>
+ </div>
+</div>
+</section>
+
+<!-- 4 旁观 -->
+<section class="screen" data-name="4 旁观" data-note="点「旁观」，右侧变成这个同事的实时屏幕：步骤、终端输出、正在改的文件。像站在他身后看。底部可以插话（不打断，下一步就能看到），也可以叫停。这是让「老板」放心的关键：随时看得见在干什么。">
+<div class="frame">
+ <div class="rail"></div>
+ <div class="side">
+  <div class="top" data-view="msg"></div>
+  <div class="nav"><span>⚑</span>待你决定<span class="pill">3</span></div>
+  <div class="sh">群聊</div>
+  <div class="row on"><div class="hash">#</div><div class="t"><div class="n">项目群<time>14:46</time></div><div class="p w">执行者 正在跑实验</div></div></div>
+  <div class="sh">私聊</div>
+  <div class="row"><div class="av a3">执<span class="s work"></span></div><div class="t"><div class="n">执行者<time>14:46</time></div><div class="p w">运行 python train.py</div></div></div>
+ </div>
+ <div class="cards">
+  <div class="main" style="flex:0 0 560px">
+   <div class="head"><div class="hash" style="width:24px;height:24px">#</div><h1>项目群</h1></div>
+   <div class="flow"><div class="col" style="width:500px">
+    <div class="msg"><div class="av a3">执</div><div class="b"><div class="who">执行者<span>14:31</span></div>
+     <div class="card" style="box-shadow:0 0 0 2px var(--blue)"><b style="font-weight:600">交办 · SGD 学习率补到 0.3</b><div style="margin-top:6px"><span class="chip run">● 进行中 · 2/3</span></div><div class="k" style="margin-top:6px">正在旁观 →</div></div></div></div>
+   </div></div>
+  </div>
+  <div class="panel" style="flex:1;width:auto">
+   <div class="head" style="padding-left:16px"><div class="av sm a3">执</div><h1>旁观 · 执行者</h1><span class="chip run">● 4 分 31 秒</span><div class="sp"></div><span class="btn">停止</span><div class="ib">✕</div></div>
+   <div class="pbody">
+    <ul class="steps" style="margin:0"><li class="d"><i>✓</i>读 shared/plan.md</li><li class="d"><i>✓</i>改 train.py：加 --lr 参数 <span class="mono" style="color:var(--green)">+6</span> <span class="mono" style="color:var(--red)">−2</span></li><li class="d"><i>✓</i>种子 1 完成 · test_acc 0.9881</li><li class="n"><i>◐</i>运行 python train.py --opt sgd --lr 0.3 --seed 2</li></ul>
+    <div class="term"><div class="c">$ python train.py --opt sgd --lr 0.3 --seed 2</div><div>epoch 1/3  loss 0.412  acc 0.9437</div><div>epoch 2/3  loss 0.118  acc 0.9796</div><div class="y">epoch 3/3  [=========>      ] 61%  eta 0:42</div></div>
+    <div><div class="ph3">正在写的文件</div><div class="file">📄 results/sgd_lr0.3.json<span class="x">实时</span></div></div>
+    <div style="margin-top:auto" class="comp" ><div class="ph">插话（不打断，他下一步会看到）…</div><div class="bar"><span class="send">↑</span></div></div>
+   </div>
+  </div>
+ </div>
+</div>
+</section>
+
+<!-- 5 研究 -->
+<section class="screen" data-name="5 研究会话" data-note="研究不是另一个系统，就是一个会话：你提问 → 导师出计划卡（你批准）→ 执行者的每轮实验是交办卡 → 写手出结论卡。右侧「研究」页签是这项研究的地图：问题 → 假设 → 实验 → 发现，每个节点状态一目了然；「变更」页签逐文件审阅。">
+<div class="frame">
+ <div class="rail"></div>
+ <div class="side">
+  <div class="top" data-view="msg"></div>
+  <div class="nav"><span>⚑</span>待你决定<span class="pill">3</span></div>
+  <div class="sh">群聊</div>
+  <div class="row"><div class="hash">#</div><div class="t"><div class="n">项目群<time>14:46</time></div><div class="p">…</div></div></div>
+  <div class="row on"><div class="hash" style="color:var(--clay)">◈</div><div class="t"><div class="n">研究：AdamW vs SGD<time>14:46</time></div><div class="p w">第 3 轮 · 2 个假设已证实</div></div></div>
+  <div class="sh">私聊</div>
+  <div class="row"><div class="av a3">执<span class="s work"></span></div><div class="t"><div class="n">执行者<time>14:46</time></div><div class="p">…</div></div></div>
+ </div>
+ <div class="cards">
+  <div class="main">
+   <div class="head"><div class="hash" style="width:24px;height:24px;color:var(--clay)">◈</div><h1>研究：MNIST 上 AdamW 与带动量 SGD 的对比</h1><span class="m">第 3 轮</span><div class="sp"></div><span class="mono" style="color:var(--green)">+1285</span></div>
+   <div class="flow"><div class="col">
+    <div class="mine">同一个小 CNN，3 个 epoch，AdamW 和带动量的 SGD 哪个测试准确率更高？</div>
+    <div class="msg"><div class="av a4">导</div><div class="b"><div class="who">导师<span>昨天</span></div>
+     <div class="card"><div style="display:flex;gap:8px;align-items:center"><b style="font-weight:600">研究计划</b><span class="chip ok">已批准</span></div>
+      <div style="font-size:13px;color:var(--fg1);margin-top:6px">指标：测试准确率（3 种子均值）· 基线：各自默认超参</div>
+      <div style="font-size:13px;color:var(--fg1)">H1 直接对照 · H2 公平调参 · H3 加 BN 后打平？</div>
+      <div class="k" style="margin-top:4px">止损：差距 &lt; 种子噪声即判打平</div></div></div></div>
+    <div class="msg"><div class="av a3">执</div><div class="b"><div class="who">执行者<span>今天</span></div>
+     <div class="card"><b style="font-weight:600">第 2 轮 · H2 公平调参</b> <span class="chip ok">完成</span><div style="font-size:13px;margin-top:6px">AdamW 1e-3：0.9912 · SGD 0.1：0.9884 → <b style="font-weight:600">H2 成立</b>（+0.28pp）</div><div class="file">📈 curves_r2.png<span class="x">打开</span></div></div></div></div>
+    <div class="msg"><div class="av a1">写</div><div class="b"><div class="who">写手<span>14:40</span></div>
+     <div class="card" style="box-shadow:0 0 0 1px var(--amber)"><b style="font-weight:600">结论草稿</b> <span class="chip wait">等你决定</span><div class="txt" style="font-size:13.5px;margin-top:6px">各自调好学习率后 AdamW 高 0.16–0.46pp，与种子噪声同量级；加 BN 后打平。</div><div style="display:flex;gap:6px;margin-top:8px"><span class="btn pri">接受</span><span class="btn">要求修改</span></div></div></div></div>
+   </div></div>
+   <div class="comp"><div class="ph">对这项研究说点什么…</div><div class="bar"><span class="cc">＋</span><span class="cc">@ 成员</span><span class="send">↑</span></div></div>
+  </div>
+  <div class="panel">
+   <div class="ptabs"><span>在岗</span><span>文件</span><span>变更</span><span class="on">研究</span><div class="sp"></div><span title="展开">⤢</span></div>
+   <div class="pbody">
+    <div style="display:flex;gap:8px"><span class="chip ok">证实 2</span><span class="chip err">否定 1</span><span class="chip run">进行 1</span><span class="chip">放弃 1</span></div>
+    <div class="map">
+     <div class="node l1">❓ AdamW 是否比 SGD 好</div>
+     <div class="node l2">H1 默认超参直接对照<span class="tag no">否定</span></div>
+     <div class="node l3 mono" style="font-weight:400">r1 · 3 种子 · 12 分钟</div>
+     <div class="node l2">H2 公平调参<span class="tag ok">证实</span></div>
+     <div class="node l3 mono" style="font-weight:400">r2 · 网格 6 档 · 48 分钟</div>
+     <div class="node l2">H3 加 BN 后打平<span class="tag ok">证实</span></div>
+     <div class="node l2">H4 补 6 个种子<span class="tag run">进行中</span></div>
+     <div class="node l2">H5 10 epoch 长跑<span class="tag idle">放弃</span></div>
+    </div>
+    <div><div class="ph3">花费</div><div style="font-size:12.5px;color:var(--fg1)">13 轮 · 14 个实验 · 2 小时 30 分 · 2.1M tokens</div></div>
+   </div>
+  </div>
+ </div>
+</div>
+</section>
+
+<!-- 6 待你决定 -->
+<section class="screen" data-name="6 待你决定" data-note="所有需要你拍板的事集中在一处（像 Linear 的 Inbox）：每条都能一键处理，也能跳回原会话。处理完就消失。侧栏顶部的数字就是这里的未决数。这是「老板」每天最常打开的地方。">
+<div class="frame">
+ <div class="rail"></div>
+ <div class="side">
+  <div class="top" data-view="msg"></div>
+  <div class="nav on"><span>⚑</span>待你决定<span class="pill">3</span></div>
+  <div class="sh">群聊</div>
+  <div class="row"><div class="hash">#</div><div class="t"><div class="n">项目群<time>14:46</time></div><div class="p">…</div></div></div>
+  <div class="sh">私聊</div>
+  <div class="row"><div class="av a3">执<span class="s work"></span></div><div class="t"><div class="n">执行者<time>14:46</time></div><div class="p">…</div></div></div>
+ </div>
+ <div class="cards"><div class="main">
+  <div class="head"><h1>待你决定</h1><span class="m">3 件</span></div>
+  <div class="inbox" style="width:760px;margin:12px auto">
+   <div class="item"><div class="av a1">写</div><div class="t"><h3>结论口径：「领先 0.3pp」还是「打平」？</h3><p>写手 · 研究：AdamW vs SGD · 12 分钟前</p><p style="color:var(--fg)">草稿：各自调好学习率后 AdamW 高 0.16–0.46pp，与种子噪声同量级；加 BN 后打平。</p><div style="display:flex;gap:6px;margin-top:8px"><span class="btn pri">接受</span><span class="btn">要求修改</span><span class="btn">去会话</span></div></div></div>
+   <div class="item"><div class="av a4">导</div><div class="t"><h3>是否补跑 6 个种子（约 40 分钟）</h3><p>导师 · 项目群 · 1 小时前</p><div style="display:flex;gap:6px;margin-top:8px"><span class="btn pri">补跑</span><span class="btn">不用</span><span class="btn">去会话</span></div></div></div>
+   <div class="item"><div class="av a3">执</div><div class="t"><h3>合并实验代码到项目（+1285 −0，3 个文件）</h3><p>执行者 · 研究：AdamW vs SGD · 昨天</p><div style="display:flex;gap:6px;margin-top:8px"><span class="btn pri">合并</span><span class="btn">看改动</span></div></div></div>
+  </div>
+ </div></div>
+</div>
+</section>
+
+<!-- 7 团队 -->
+<section class="screen" data-name="7 团队与招人" data-note="团队从项目名旁的「⋯」进入（每个项目有自己的成员配置）。团队页像通讯录：每个同事一张卡（角色、模型、在不在岗、这周做了几件、你的评价）。「招人」：一句话描述要什么样的人 → 生成一份设定（agent 文件）→ 你看一眼就入职。内置几个常用角色，一键加入。">
+<div class="frame">
+ <div class="rail"></div>
+ <div class="side">
+  <div class="top" data-view="team"></div>
+  <div class="nav on">全部成员<span class="cnt">5</span></div><div class="nav">工作流规则</div><div class="nav">预算与用量</div>
+ </div>
+ <div class="cards"><div class="main" style="position:relative">
+  <div class="head"><h1>团队</h1><div class="sp"></div><span class="btn pri">＋ 招人</span></div>
+  <div style="padding:20px 28px" class="grid">
+   <div class="mcard"><div style="display:flex;gap:10px;align-items:center"><div class="av a4">导<span class="s idle"></span></div><div><b style="font-weight:600">导师</b><div class="k">把方向、审计划</div></div></div><div class="r">只读 · Opus 级模型 · 本周 6 件 · 👍 5</div></div>
+   <div class="mcard"><div style="display:flex;gap:10px;align-items:center"><div class="av a3">执<span class="s work"></span></div><div><b style="font-weight:600">执行者</b><div class="k">写代码、跑实验</div></div></div><div class="r">本机 + han5 · 本周 14 件 · 👍 4 👎 1</div></div>
+   <div class="mcard"><div style="display:flex;gap:10px;align-items:center"><div class="av a2">文<span class="s idle"></span></div><div><b style="font-weight:600">文献员</b><div class="k">找文献、读论文</div></div></div><div class="r">联网 · 本周 9 件 · 👍 6</div></div>
+   <div class="mcard"><div style="display:flex;gap:10px;align-items:center"><div class="av a1">写<span class="s wait"></span></div><div><b style="font-weight:600">写手</b><div class="k">写结论、写论文</div></div></div><div class="r">本周 3 件</div></div>
+   <div class="mcard"><div style="display:flex;gap:10px;align-items:center"><div class="av a5">审<span class="s off"></span></div><div><b style="font-weight:600">审稿人</b><div class="k">挑毛病 <span class="chip">暂停</span></div></div></div><div class="r">本周 0 件</div></div>
+  </div>
+  <div class="overlay"><div class="dlg">
+   <div style="font-size:16px;font-weight:600">招人</div>
+   <div class="lbl">要一个什么样的同事</div>
+   <div class="fld" style="min-height:64px">会做统计检验的，帮我判断差距是不是显著，不懂就说不懂</div>
+   <div class="lbl">草拟的设定</div>
+   <div class="card" style="padding:10px 12px"><div style="display:flex;gap:10px;align-items:center"><div class="av a2">统</div><div><b style="font-weight:600">统计师</b><div class="k">显著性检验、置信区间、效应量</div></div></div><div class="k" style="margin-top:8px">工具：读文件、跑 Python（只读实验结果）· 模型：默认 · <span style="color:var(--blue)">编辑设定</span></div></div>
+   <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:16px"><span class="btn">取消</span><span class="btn pri">入职</span></div>
+  </div></div>
+ </div></div>
+</div>
+</section>
+
+<!-- 8 首次打开 -->
+<section class="screen" data-name="8 首次打开" data-note="第一次打开：没有任何说明文字。中间是 Claude 式的问候和输入框；输入框里直接问「想研究什么」。发出第一句话时，如果还没有项目/模型，就在输入框上方依次补齐（选文件夹、接模型），默认团队自动就位，然后这句话进入新建的项目群。">
+<div class="frame">
+ <div class="rail"></div>
+ <div class="side">
+  <div class="top" data-view="first"></div>
+  <div class="sh">私聊</div>
+  <div class="row"><div class="av a4">导<span class="s idle"></span></div><div class="t"><div class="n">导师</div><div class="p">内置</div></div></div>
+  <div class="row"><div class="av a3">执<span class="s idle"></span></div><div class="t"><div class="n">执行者</div><div class="p">内置</div></div></div>
+  <div class="row"><div class="av a2">文<span class="s idle"></span></div><div class="t"><div class="n">文献员</div><div class="p">内置</div></div></div>
+  <div class="row"><div class="av a1">写<span class="s idle"></span></div><div class="t"><div class="n">写手</div><div class="p">内置</div></div></div>
+ </div>
+ <div class="cards"><div class="main" style="justify-content:center">
+  <div style="text-align:center;margin-top:-80px"><div class="serif" style="font-size:30px">想研究什么？</div></div>
+  <div class="comp" style="margin-top:26px">
+   <div style="display:flex;gap:8px;align-items:center;padding:4px 6px 10px;border-bottom:1px solid var(--edge);margin-bottom:6px"><span class="chip">① 项目文件夹</span><span class="k">~/ORA/新项目</span><span class="btn" style="height:24px">换一个</span><div class="sp"></div><span class="chip wait">② 接一个模型</span><span class="btn" style="height:24px">添加</span></div>
+   <div class="ph" style="color:var(--fg)">同一个小 CNN，AdamW 和带动量的 SGD 哪个在 3 个 epoch 内更好？</div>
+   <div class="bar"><span class="cc">＋</span><span class="cc">📁 新项目</span><span class="send">↑</span></div></div>
+  <div style="width:720px;margin:20px auto 0;display:flex;gap:8px;justify-content:center"><span class="btn">复现一篇论文</span><span class="btn">比较两种方法</span><span class="btn">写文献综述</span><span class="btn">从读到写</span></div>
+ </div></div>
+</div>
+</section>
+
+<!-- 9 全部项目 -->
+<section class="screen" data-name="9 全部项目" data-proj="all" data-note="最左栏是项目栏（像 Slack 的工作区、Discord 的服务器）：每个项目一个方块，蓝点表示有人在干活，数字表示有几件事等你。最上面「全部」把所有项目统一显示：侧栏按项目分组列出每个项目的会话（同一个成员在不同项目里是不同的会话，互相隔离），中间是跨项目的今日概览。">
+<div class="frame">
+ <div class="rail"></div>
+ <div class="side">
+  <div class="top" data-view="all"></div>
+  <div class="nav"><span>⚑</span>待你决定<span class="pill">5</span></div>
+  <div class="sh">手写数字识别</div>
+  <div class="row"><div class="hash">#</div><div class="t"><div class="n">项目群<time>14:46</time></div><div class="p w">执行者 正在跑实验</div></div></div>
+  <div class="row"><div class="av a1">写<span class="s wait"></span></div><div class="t"><div class="n">写手<time>10:02</time></div><div class="p">等你确认结论口径</div></div></div>
+  <div class="sh">长上下文检索头</div>
+  <div class="row"><div class="hash">#</div><div class="t"><div class="n">项目群<time>13:05</time></div><div class="p w">文献员 正在读 2 篇论文</div></div></div>
+  <div class="row"><div class="av a3">执<span class="s idle"></span></div><div class="t"><div class="n">执行者<time>昨天</time></div><div class="p">32k 上跑完了，结果在 results.csv</div></div></div>
+  <div class="sh">复现 Transformer</div>
+  <div class="row"><div class="hash">#</div><div class="t"><div class="n">项目群<time>周三</time></div><div class="p">导师：先把数据管线对齐原文</div></div></div>
+ </div>
+ <div class="cards"><div class="main">
+  <div class="head"><h1>全部项目</h1><span class="m">今天</span></div>
+  <div style="width:820px;margin:16px auto;display:flex;flex-direction:column;gap:18px">
+   <div class="grid" style="grid-template-columns:repeat(4,1fr)">
+    <div class="mcard"><div class="k">等你决定</div><div style="font-size:22px;font-weight:600;color:var(--amber)">5</div></div>
+    <div class="mcard"><div class="k">正在工作</div><div style="font-size:22px;font-weight:600;color:var(--blue)">3</div></div>
+    <div class="mcard"><div class="k">今天完成</div><div style="font-size:22px;font-weight:600">11</div></div>
+    <div class="mcard"><div class="k">今天花费</div><div style="font-size:22px;font-weight:600">1.2M</div><div class="k">tokens · 实验 2 小时</div></div>
+   </div>
+   <div><div class="ph3">正在工作</div>
+    <div class="card" style="padding:4px 6px">
+     <div class="desk"><div class="av a3">执<span class="s work"></span></div><div class="t"><div class="nm">执行者 <span class="k">手写数字识别</span></div><div class="st">SGD 学习率补到 0.3 · 种子 2/3</div><div class="bar2"><i style="width:55%"></i></div></div><span class="btn" style="height:24px;padding:0 8px">旁观</span></div>
+     <div class="desk"><div class="av a2">文<span class="s work"></span></div><div class="t"><div class="nm">文献员 <span class="k">长上下文检索头</span></div><div class="st">读 2 篇论文 · 找检索头的消融设置</div></div><span class="btn" style="height:24px;padding:0 8px">旁观</span></div>
+     <div class="desk"><div class="av a4">导<span class="s work"></span></div><div class="t"><div class="nm">导师 <span class="k">复现 Transformer</span></div><div class="st">审数据管线 · 2 分钟</div></div><span class="btn" style="height:24px;padding:0 8px">旁观</span></div>
+    </div></div>
+   <div><div class="ph3">项目</div><div class="grid">
+    <div class="mcard"><div style="display:flex;gap:8px;align-items:center"><div class="pt" style="width:28px;height:28px;font-size:12px;background:#e3eefb;color:#1d4f8a">手</div><b style="font-weight:600">手写数字识别</b></div><div class="r">研究 3 · 进行中 1 · 等你 3</div></div>
+    <div class="mcard"><div style="display:flex;gap:8px;align-items:center"><div class="pt" style="width:28px;height:28px;font-size:12px;background:#dff1ea;color:#1d6b52">长</div><b style="font-weight:600">长上下文检索头</b></div><div class="r">研究 1 · 进行中 1 · 等你 2</div></div>
+    <div class="mcard"><div style="display:flex;gap:8px;align-items:center"><div class="pt" style="width:28px;height:28px;font-size:12px;background:#fbe7dc;color:#8a3d1d">复</div><b style="font-weight:600">复现 Transformer</b></div><div class="r">研究 1 · 进行中 1</div></div>
+   </div></div>
+  </div>
+ </div></div>
+</div>
+</section>
+
+<!-- 10 看板 -->
+<section class="screen" data-name="10 看板" data-note="看板是项目的全局视图，侧栏「待你决定」下面的固定入口。卡片不用手动建：每张交办卡、每项研究自动出现在这里，状态随工作自动移动。也可以在这里直接新建一张（等于在群里 @ 某人派活），拖到别人头上就是改派。「全部」视图里有跨项目的看板。">
+<div class="frame">
+ <div class="rail"></div>
+ <div class="side">
+  <div class="top" data-view="board"></div>
+  <div class="nav"><span>⚑</span>待你决定<span class="pill">3</span></div>
+  <div class="sh">研究</div>
+  <div class="row"><div class="hash" style="color:var(--clay)">◈</div><div class="t"><div class="n">AdamW vs SGD<time>14:46</time></div><div class="p" style="color:var(--amber)">结论草稿等你确认</div></div></div>
+  <div class="sh">群聊</div>
+  <div class="row"><div class="hash">#</div><div class="t"><div class="n">项目群<time>14:46</time></div><div class="p w">执行者 正在跑实验</div></div></div>
+  <div class="sh">私聊</div>
+  <div class="row"><div class="av a3">执<span class="s work"></span></div><div class="t"><div class="n">执行者<time>14:46</time></div><div class="p w">运行 python train.py</div></div></div>
+  <div class="row"><div class="av a2">文<span class="s idle"></span></div><div class="t"><div class="n">文献员<time>11:20</time></div><div class="p">好的</div></div></div>
+ </div>
+ <div class="cards"><div class="main">
+  <div class="head"><h1>看板</h1><span class="m">手写数字识别</span><div class="sp"></div><div class="seg" style="margin:0;width:230px"><span class="on">按状态</span><span>按成员</span><span>只看研究</span></div><span class="btn">＋ 派活</span></div>
+  <div class="col3">
+   <div class="lane"><h4>排队 <span class="k">2</span></h4>
+    <div class="kc">画最终对比图，6 个种子<div class="m"><div class="av sm a3">执</div>执行者 · 前面 1 件</div></div>
+    <div class="kc">把结论写成一段摘要<div class="m"><div class="av sm a1">写</div>写手 · 等结论</div></div></div>
+   <div class="lane"><h4>进行中 <span class="k">1</span></h4>
+    <div class="kc" style="box-shadow:0 0 0 1px var(--blue)">SGD 学习率补到 0.3<div class="bar2"><i style="width:55%"></i></div><div class="m"><div class="av sm a3">执</div>种子 2/3 · 4 分钟</div></div></div>
+   <div class="lane"><h4>等你 <span class="k">3</span></h4>
+    <div class="kc" style="box-shadow:0 0 0 1px #d49a1d">结论口径<div class="m"><div class="av sm a1">写</div>写手 · 12 分钟</div></div>
+    <div class="kc" style="box-shadow:0 0 0 1px #d49a1d">补跑 6 个种子？<div class="m"><div class="av sm a4">导</div>导师 · 1 小时</div></div>
+    <div class="kc" style="box-shadow:0 0 0 1px #d49a1d">合并实验代码 +1285<div class="m"><div class="av sm a3">执</div>执行者 · 昨天</div></div></div>
+   <div class="lane"><h4>完成 <span class="k">9</span></h4>
+    <div class="kc" style="color:var(--fg2)">◈ 研究：AdamW vs SGD · 第 2 轮<div class="m">H2 证实 · 48 分钟</div></div>
+    <div class="kc" style="color:var(--fg2)">找 warmup 出处<div class="m"><div class="av sm a2">文</div>11:20</div></div>
+    <div class="kc" style="color:var(--fg2)">补跑 AdamW 6 个种子<div class="m"><div class="av sm a3">执</div>昨天</div></div></div>
+  </div>
+ </div></div>
+</div>
+</section>
+
+<!-- 11 文件 -->
+<section class="screen" data-name="11 文件（右侧）" data-note="文件放在右侧边栏，和编程软件一样：「文件」标签上面是文件树（标出同事改过的），点开文件在下面浏览和编辑：代码直接改，Markdown 切换编辑/预览，底部一行显示是谁在哪件交办里改的。右上「⤢」把面板拉宽成编辑器（这一屏就是拉宽后的样子），聊天区变窄但仍可用；再点一次收回。聊天里点任何文件也在这里打开。">
+<div class="frame">
+ <div class="rail"></div>
+ <div class="side">
+  <div class="top" data-view="msg"></div>
+  <div class="nav"><span>⚑</span>待你决定<span class="pill">3</span></div>
+  <div class="sh">研究</div>
+  <div class="row"><div class="hash" style="color:var(--clay)">◈</div><div class="t"><div class="n">AdamW vs SGD<time>14:46</time></div><div class="p" style="color:var(--amber)">结论草稿等你确认</div></div></div>
+  <div class="sh">群聊</div>
+  <div class="row on"><div class="hash">#</div><div class="t"><div class="n">项目群<time>14:46</time></div><div class="p w">执行者 正在跑实验</div></div></div>
+  <div class="sh">私聊</div>
+  <div class="row"><div class="av a3">执<span class="s work"></span></div><div class="t"><div class="n">执行者<time>14:46</time></div><div class="p w">运行 python train.py</div></div></div>
+  <div class="row"><div class="av a1">写<span class="s wait"></span></div><div class="t"><div class="n">写手<time>10:02</time></div><div class="p">等你确认结论口径</div></div></div>
+ </div>
+ <div class="cards">
+  <div class="main" style="flex:0 0 470px">
+   <div class="head"><div class="hash" style="width:24px;height:24px">#</div><h1>项目群</h1></div>
+   <div class="flow"><div class="col" style="width:420px">
+    <div class="msg"><div class="av a1">写</div><div class="b"><div class="who">写手<span>14:40</span></div><div class="txt" style="font-size:13.5px">计划补了止损条件，见</div><div class="file" style="box-shadow:0 0 0 1px var(--blue)">📝 shared/plan.md<span class="x">已在右侧打开</span></div></div></div>
+    <div class="mine" style="font-size:13.5px">H2 的学习率网格写清楚，加上 0.3</div>
+   </div></div>
+   <div class="comp" style="width:430px"><div class="ph">在群里说话…</div><div class="bar"><span class="cc">＋</span><span class="cc">@ 成员</span><span class="send">↑</span></div></div>
+  </div>
+  <div class="panel" style="flex:1;width:auto">
+   <div class="ptabs"><span>在岗</span><span class="on">文件</span><span>变更</span><div class="sp"></div><span title="收回">⤡</span></div>
+   <div style="flex:1;display:flex;min-height:0">
+    <div class="tree" style="width:210px;border-right:1px solid var(--edge);padding:8px 6px">
+     <div>▾ 📁 shared</div><div style="padding-left:22px" class="on">📝 plan.md <span class="g" style="color:var(--blue)">写手</span></div><div style="padding-left:22px">📝 conclusion.md <span class="g" style="color:var(--green)">新</span></div>
+     <div>▾ 📁 experiments</div><div style="padding-left:22px">🐍 train.py <span class="g" style="color:var(--amber)">改</span></div><div style="padding-left:22px">🐍 eval.py</div>
+     <div>▸ 📁 results</div><div>▸ 📁 data</div><div>📄 README.md</div>
+    </div>
+    <div style="flex:1;display:flex;flex-direction:column;min-width:0">
+     <div class="ftabs"><span class="on">plan.md</span><span>train.py</span><div class="sp"></div><div class="seg" style="margin:0;width:140px"><span class="on">编辑</span><span>预览</span></div></div>
+     <div class="code" style="flex:1;padding:10px 0">
+      <div><i>1</i># 研究计划：AdamW vs SGD</div><div><i>2</i></div>
+      <div><i>3</i>**问题**：同一个小 CNN，3 个 epoch，AdamW 和带动量的 SGD 哪个更好？</div><div><i>4</i></div>
+      <div><i>5</i>- 指标：测试准确率（3 个种子均值）</div><div><i>6</i>- H1 默认超参直接对照</div>
+      <div class="add"><i>7</i>- H2 公平调参：各自 3 档学习率（SGD 0.03 / 0.1 / 0.3）</div>
+      <div class="add"><i>8</i>- 止损：差距小于种子噪声即判打平</div><div><i>9</i>- H3 加 BN 后是否打平</div>
+     </div>
+     <div style="border-top:1px solid var(--edge);padding:8px 12px;display:flex;gap:8px;align-items:center;font-size:12px;color:var(--fg2)"><div class="av sm a1">写</div>写手 14:40 改了第 7–8 行 · 来自交办「整理计划」<div class="sp"></div><span class="btn" style="height:24px">保存</span></div>
+    </div>
+   </div>
+  </div>
+ </div>
+</div>
+</section>
+
+<!-- 12 资料与阅读 -->
+<section class="screen" data-name="12 资料与阅读（不变）" data-note="资料和阅读保持原来的逻辑：左栏底部「资料」进入，侧栏是 导入 / 全部 / 在读 / 未读 / 已读 / 发现 和最近阅读，中间是论文列表；打开一篇就是原来的阅读器（PDF + 右侧助手、笔记、对照翻译等），不加新东西，只换成统一的视觉。">
+<div class="frame">
+ <div class="rail" data-active="lib"></div>
+ <div class="side">
+  <div class="top" data-view="lib"></div>
+  <div class="nav">导入</div><div class="nav on">全部<span class="cnt">19</span></div><div class="nav">在读</div><div class="nav">未读</div><div class="nav">已读</div><div class="nav">发现</div>
+  <div class="sh">最近阅读</div><div class="nav" style="font-size:13px">Attention Is All You Need</div><div class="nav" style="font-size:13px">Accurate, Large Minibatch SGD</div><div class="nav" style="font-size:13px">Decoupled Weight Decay</div>
+ </div>
+ <div class="cards"><div class="main">
+  <div class="head"><h1 class="serif" style="font-size:22px;font-weight:400">全部</h1><div class="sp"></div><span class="btn">⌕ 搜索</span><span class="btn pri">导入</span></div>
+  <div style="width:900px;margin:12px auto">
+   <div style="display:grid;grid-template-columns:1fr 160px 120px;font-size:12px;color:var(--fg3);padding:6px 10px;border-bottom:1px solid var(--edge)"><span>名称</span><span>来源</span><span>上次打开</span></div>
+   <div style="display:grid;grid-template-columns:1fr 160px 120px;font-size:13.5px;padding:10px;border-bottom:1px solid var(--edge)"><span>📄 Attention Is All You Need</span><span style="color:var(--fg2)">NeurIPS</span><span style="color:var(--fg2)">今天</span></div>
+   <div style="display:grid;grid-template-columns:1fr 160px 120px;font-size:13.5px;padding:10px;border-bottom:1px solid var(--edge)"><span>📄 Accurate, Large Minibatch SGD</span><span style="color:var(--fg2)">arXiv</span><span style="color:var(--fg2)">昨天</span></div>
+   <div style="display:grid;grid-template-columns:1fr 160px 120px;font-size:13.5px;padding:10px;border-bottom:1px solid var(--edge)"><span>📄 Decoupled Weight Decay Regularization</span><span style="color:var(--fg2)">ICLR</span><span style="color:var(--fg2)">周三</span></div>
+   <div style="display:grid;grid-template-columns:1fr 160px 120px;font-size:13.5px;padding:10px;border-bottom:1px solid var(--edge)"><span>📄 On the Variance of the Adaptive Learning Rate</span><span style="color:var(--fg2)">ICLR</span><span style="color:var(--fg2)">—</span></div>
+  </div>
+ </div></div>
+</div>
+</section>
+
+<script>
+
+const PROJ=[["手","手写数字识别","#e3eefb","#1d4f8a",3,true],["长","长上下文检索头","#dff1ea","#1d6b52",2,true],["复","复现 Transformer","#fbe7dc","#8a3d1d",0,true]];
+document.querySelectorAll('.screen').forEach(sc=>{
+ const proj=sc.dataset.proj||"手";
+ const r=sc.querySelector('.rail'); const act=r.dataset.active;
+ r.innerHTML=`<div class="pt all ${proj==='all'&&!act?'on':''}" title="全部项目">⌂</div><div class="rsep"></div>`+
+  PROJ.map(p=>`<div class="pt ${proj===p[0]&&!act?'on':''}" title="${p[1]}" style="background:${p[2]};color:${p[3]}">${p[0]}${p[4]?`<span class="bd">${p[4]}</span>`:''}${p[5]?'<span class="wk"></span>':''}</div>`).join('')+
+  `<div class="pt all" style="box-shadow:none;background:transparent;color:var(--fg2);font-size:18px" title="新建项目">＋</div><div style="flex:1"></div>`+
+  `<div class="ri ${act==='lib'?'on':''}" title="资料">📚</div><div class="ri" title="定时">⏱</div><div class="ri" title="设置">⚙︎</div>`;
+ const top=sc.querySelector('.top'); if(!top) return; const v=top.dataset.view;
+ const name=proj==='all'?'全部项目':(v==='lib'?'资料':(v==='first'?'ORA':'手写数字识别'));
+ top.outerHTML=`<div class="top"><div class="proj">${name}</div><div class="sp"></div><div class="ib">⌕</div>${v==='lib'||proj==='all'||v==='first'?'':'<div class="ib">⋯</div>'}</div>`;
+ if(v==='lib'||v==='first') return;
+ const side=sc.querySelector('.side'); const inbox=[...side.querySelectorAll('.nav')].find(n=>n.textContent.includes('待你决定'));
+ const board=document.createElement('div'); board.className='nav'+(v==='board'?' on':''); board.innerHTML='<span>▦</span>看板';
+ if(inbox) inbox.after(board); else side.querySelector('.top').after(board);
+});
+
+const screens=[...document.querySelectorAll('.screen')];
+const tabs=document.getElementById('tabs'), note=document.getElementById('note');
+function show(i){screens.forEach((s,j)=>s.classList.toggle('on',i===j));[...tabs.children].forEach((b,j)=>b.classList.toggle('on',i===j));note.textContent=screens[i].dataset.note;location.hash=i+1;}
+screens.forEach((s,i)=>{const b=document.createElement('button');b.textContent=s.dataset.name;b.onclick=()=>show(i);tabs.appendChild(b);});
+show(Math.max(0,(parseInt(location.hash.slice(1))||1)-1));
+</script>
+</body>
+</html>

@@ -43,7 +43,7 @@ import {
 } from "../ui";
 import {
   TeamNavigation,
-  TeamSwitcher,
+  ProjectHeader,
 } from "../screens/research/TeamNavigation";
 import { parseAppRoute, type AppScreen } from "./routes";
 import {
@@ -55,6 +55,7 @@ import { RecentReading, SectionNavigation } from "./SectionNavigation";
 import { sidebarId, type SidebarEntryId } from "./sidebar-entries";
 import { ScheduleNavigation } from "../screens/schedules/ScheduleCenter";
 import styles from "./AppSidebar.module.css";
+import { ProjectRail } from "./ProjectRail";
 import { useLocal } from "./edition";
 import { useResearchNavigation } from "../screens/research/ResearchNavigation";
 
@@ -452,13 +453,7 @@ function AppResearchSidebar({
           onClick={() => onCollapsedChange(!collapsed)}
         />
         <div className={styles.railDestinations}>
-          {railLink(
-            "research",
-            House,
-            t("app.section.research"),
-            destination("research"),
-            section === "research",
-          )}
+          <ProjectRail hash={contextHash} section={section} go={choose} />
           {railLink(
             "materials",
             Library,
@@ -519,7 +514,7 @@ function AppResearchSidebar({
               }
             >
               {section === "research" ? (
-                <TeamSwitcher hash={contextHash} go={choose} />
+                <ProjectHeader hash={contextHash} go={choose} />
               ) : (
                 <h2 className={styles.sectionTitle}>{title}</h2>
               )}
@@ -565,16 +560,6 @@ function AppResearchSidebar({
               >
                 {section === "research" ? (
                   <>
-                    <div className={styles.researchActions}>
-                      <SidebarItem
-                        data-id={sidebarId("new-research")}
-                        icon={SquarePen}
-                        label={t("projects.newResearch")}
-                        href={`#${newResearchHash}`}
-                        active={screen === "new-research"}
-                        onClick={followLink(choose, newResearchHash)}
-                      />
-                    </div>
                     <TeamNavigation hash={contextHash} go={choose} />
                   </>
                 ) : (

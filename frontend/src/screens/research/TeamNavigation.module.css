@@ -337,3 +337,55 @@
   color: var(--ui-fg-3);
   font-size: var(--ui-text-13);
 }
+
+.projectName {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  font-size: var(--ui-text-14);
+  font-weight: var(--ui-weight-strong);
+  letter-spacing: -0.01em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.waitingCount {
+  position: absolute;
+  top: 50%;
+  right: var(--ui-space-8);
+  min-width: var(--ui-space-20);
+  height: var(--ui-space-20);
+  padding: 0 var(--ui-space-6);
+  border-radius: var(--ui-r-pill);
+  background: color-mix(in oklab, var(--ui-warning-text) 16%, transparent);
+  color: var(--ui-warning-text);
+  font-size: var(--ui-text-12);
+  line-height: var(--ui-space-20);
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  transform: translateY(-50%);
+  pointer-events: none;
+}
+
+/* A research's mark: the same square as a channel's #, in the brand colour of research. */
+.researchMark {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: var(--ui-space-32);
+  height: var(--ui-space-32);
+  border-radius: var(--ui-r-8);
+  background: var(--ui-bg-2);
+  color: var(--ui-fg-1);
+}
+
+.preview[data-waiting] {
+  color: var(--ui-warning-text);
+}
+
+.preview[data-working] {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--ui-space-4);
+}
