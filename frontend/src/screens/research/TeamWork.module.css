@@ -121,3 +121,116 @@
   border-radius: var(--ui-r-8);
   background: var(--ui-bg-1);
 }
+
+/* The board: a toolbar, then columns of cards. */
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--ui-space-12);
+  padding: var(--ui-space-16) var(--ui-space-20) var(--ui-space-8);
+}
+
+.toolbar h2 {
+  margin: 0;
+  font-family: var(--ui-font-display);
+  font-size: var(--ui-text-20);
+  font-weight: var(--ui-weight-regular);
+}
+
+.toolbar .attention {
+  margin: 0;
+}
+
+.grow {
+  flex: 1;
+}
+
+.lanes {
+  display: grid;
+  grid-auto-columns: minmax(220px, 1fr);
+  grid-auto-flow: column;
+  gap: var(--ui-space-12);
+  align-items: start;
+  padding: var(--ui-space-8) var(--ui-space-20) var(--ui-space-24);
+  overflow-x: auto;
+}
+
+.lane h3 {
+  display: flex;
+  align-items: center;
+  gap: var(--ui-space-6);
+  margin: 0 0 var(--ui-space-8);
+  color: var(--ui-fg-2);
+  font-size: var(--ui-text-13);
+  font-weight: var(--ui-weight-regular);
+}
+
+.lane h3 span {
+  color: var(--ui-fg-3);
+  font-variant-numeric: tabular-nums;
+}
+
+.lane ul {
+  display: grid;
+  gap: var(--ui-space-8);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.card {
+  display: grid;
+  gap: var(--ui-space-8);
+  padding: var(--ui-space-10) var(--ui-space-12);
+  border-radius: var(--ui-r-10);
+  background: var(--ui-elev);
+  box-shadow: var(--ui-elev-1);
+  color: inherit;
+  text-decoration: none;
+}
+
+.card:hover {
+  box-shadow: 0 0 0 1px var(--ui-edge-strong);
+}
+
+.card[data-group="working"],
+.card[data-group="review"] {
+  box-shadow: 0 0 0 1px
+    color-mix(in oklab, var(--ui-info-text) 55%, transparent);
+}
+
+.card[data-group="waiting"],
+.card[data-stuck] {
+  box-shadow: 0 0 0 1px
+    color-mix(in oklab, var(--ui-warning-text) 55%, transparent);
+}
+
+.card[data-group="done"] {
+  color: var(--ui-fg-2);
+}
+
+.card .title {
+  display: -webkit-box;
+  overflow: hidden;
+  font-size: var(--ui-text-13);
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.meta {
+  display: flex;
+  align-items: center;
+  gap: var(--ui-space-6);
+  min-width: 0;
+  color: var(--ui-fg-2);
+  font-size: var(--ui-text-12);
+}
+
+.meta .status {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

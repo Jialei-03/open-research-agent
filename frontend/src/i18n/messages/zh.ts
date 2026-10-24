@@ -2,7 +2,7 @@ import type { en } from "./en";
 
 // An empty string falls back to the English text; the catalog test keeps it from shipping.
 export const zh: { [K in keyof typeof en]: string } = {
-  "team.work.title": "工作",
+  "team.work.title": "看板",
   "team.work.attention": "注意力账",
   "team.work.clear": "没有等你的事",
   "team.work.headline#one": "{count} 件等你",
@@ -1750,6 +1750,13 @@ export const zh: { [K in keyof typeof en]: string } = {
   "panel.desk": "工位",
   "panel.tasks": "交办记录",
   "panel.recentFiles": "最近产出",
+  "board.lane.queued": "排队",
+  "board.lane.working": "进行中",
+  "board.lane.waiting": "等你",
+  "board.lane.done": "完成",
+  "board.byState": "按状态",
+  "board.byMember": "按成员",
+  "board.research": "只看研究",
   "inbox.title": "待你决定",
   "board.title": "看板",
   "sidebar.groups": "群聊",

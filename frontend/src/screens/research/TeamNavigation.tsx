@@ -500,9 +500,9 @@ export function TeamConversationList({
           data-id={sidebarId("board")}
           icon={Columns3}
           label={t("board.title")}
-          href={`#workspaces/${id}/board`}
-          active={route.screen === "workspaces" && route.tab === "board"}
-          onClick={followLink(go, `workspaces/${id}/board`)}
+          href={`#${teamHash(id, "work")}`}
+          active={current("work")}
+          onClick={followLink(go, teamHash(id, "work"))}
         />
       </SidebarSection>
       <SidebarResearches workspaceId={id} hash={hash} go={go} />

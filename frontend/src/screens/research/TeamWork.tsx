@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useI18n } from "../../i18n/I18nProvider";
 import { followLink } from "../../reader/route";
+import { SegmentedControl } from "../../ui";
 import { MemberAvatar } from "../team/MemberEditor";
 import { memberName } from "../team/member-model";
 import { colleagueTask } from "./TeamMemberCard";
@@ -8,7 +9,6 @@ import { shortDuration } from "./process/model";
 import { TEAM_EVENT, teamHash, type Team } from "./team-api";
 import {
   getTeamWork,
-  workGroups,
   type AttentionMetrics,
   type TeamWork,
   type WorkItem,
@@ -44,6 +44,9 @@ export function AttentionLine({ value }: { value: AttentionMetrics }) {
   );
 }
 
+type Lane = { key: string; label: string; items: WorkItem[] };
+
+/** The project's board: every piece of work as a card, in columns by state or by colleague. */
 export function TeamWorkView({
   team,
   work,
@@ -54,41 +57,67 @@ export function TeamWorkView({
   go(hash: string): void;
 }) {
   const { t, tn } = useI18n();
+  const [view, setView] = useState<"state" | "member" | "research">("state");
   const members = new Map(team.members.map((m) => [m.id, m]));
-  const row = (item: WorkItem) => {
+  const items =
+    view === "research"
+      ? work.items.filter((item) => item.research_id)
+      : work.items;
+  // Review is work under way, by a reviewer; the board keeps four columns.
+  const column = (item: WorkItem) =>
+    item.group === "review" ? "working" : item.group;
+  const lanes: Lane[] =
+    view === "member"
+      ? team.members
+          .filter((m) => m.role !== "human" && !m.deleted)
+          .map((m) => ({
+            key: m.id,
+            label: memberName(m, t),
+            items: items.filter((item) => item.member_ids.includes(m.id)),
+          }))
+      : (["queued", "working", "waiting", "done"] as const).map((key) => ({
+          key,
+          label: t(`board.lane.${key}`),
+          items: items.filter((item) => column(item) === key),
+        }));
+  const card = (item: WorkItem) => {
     const status =
       item.status === "working"
         ? colleagueTask(item.current_step, t)
         : t(`team.work.${item.status}`);
+    const target = teamHash(
+      team.workspace_id,
+      item.channel_id,
+      item.thread_id || "",
+    );
     return (
       <li key={item.id}>
         <a
-          className={styles.row}
-          href={`#${teamHash(team.workspace_id, item.channel_id, item.thread_id || "")}`}
-          onClick={followLink(
-            go,
-            teamHash(team.workspace_id, item.channel_id, item.thread_id || ""),
-          )}
+          className={styles.card}
+          data-group={item.group}
+          data-stuck={item.stuck.length ? true : undefined}
+          href={`#${target}`}
+          onClick={followLink(go, target)}
         >
-          <span className={styles.avatars}>
-            {item.member_ids.slice(0, 3).map((id) => {
-              const assignee = members.get(id);
-              return assignee ? (
-                <span key={id} title={memberName(assignee, t)}>
-                  <MemberAvatar member={assignee} size="sm" />
-                </span>
-              ) : null;
-            })}
-          </span>
-          <span className={styles.content}>
-            <span className={styles.title}>{item.title}</span>
+          <span className={styles.title}>{item.title}</span>
+          <span className={styles.meta}>
+            <span className={styles.avatars}>
+              {item.member_ids.slice(0, 3).map((id) => {
+                const assignee = members.get(id);
+                return assignee ? (
+                  <span key={id} title={memberName(assignee, t)}>
+                    <MemberAvatar member={assignee} size="sm" />
+                  </span>
+                ) : null;
+              })}
+            </span>
             <span className={styles.status}>{status}</span>
-          </span>
-          {!!item.stuck.length && (
-            <span className={styles.stuck}>{t("team.work.stuck")}</span>
-          )}
-          <span className={styles.elapsed}>
-            {shortDuration(item.elapsed_seconds, t)}
+            {!!item.stuck.length && (
+              <span className={styles.stuck}>{t("team.work.stuck")}</span>
+            )}
+            <span className={styles.elapsed}>
+              {shortDuration(item.elapsed_seconds, t)}
+            </span>
           </span>
         </a>
       </li>
@@ -96,40 +125,40 @@ export function TeamWorkView({
   };
   return (
     <div className={styles.page} data-testid="team-work">
-      <div className={styles.body}>
+      <div className={styles.toolbar}>
         <h2>
           {work.counts.waiting
             ? tn("team.work.headline", work.counts.waiting)
             : t("team.work.clear")}
         </h2>
         <AttentionLine value={work.attention.total} />
-        {!!work.attention.researches.length && (
-          <details className={styles.researches}>
-            <summary>{t("team.work.researches")}</summary>
-            {work.attention.researches.map((value) => (
-              <section key={value.research_id}>
-                <h3>{value.title}</h3>
-                <AttentionLine value={value} />
-              </section>
-            ))}
-          </details>
-        )}
-        {workGroups.map((group) => {
-          const items = work.items.filter((item) => item.group === group);
-          if (!items.length) return null;
-          const label = tn(`team.work.group.${group}`, items.length);
-          return group === "done" ? (
-            <details className={styles.group} key={group}>
-              <summary>{label}</summary>
-              <ul>{items.map(row)}</ul>
-            </details>
-          ) : (
-            <section className={styles.group} key={group} aria-label={label}>
-              <h2>{label}</h2>
-              <ul>{items.map(row)}</ul>
-            </section>
-          );
-        })}
+        <span className={styles.grow} />
+        <SegmentedControl
+          kind="radio"
+          label={t("board.title")}
+          value={view}
+          onChange={(value) => setView(value as typeof view)}
+          options={[
+            { value: "state", label: t("board.byState") },
+            { value: "member", label: t("board.byMember") },
+            { value: "research", label: t("board.research") },
+          ]}
+        />
+      </div>
+      <div className={styles.lanes}>
+        {lanes.map((lane) => (
+          <section
+            key={lane.key}
+            className={styles.lane}
+            aria-label={lane.label}
+          >
+            <h3>
+              {lane.label}
+              <span>{lane.items.length}</span>
+            </h3>
+            <ul>{lane.items.map(card)}</ul>
+          </section>
+        ))}
       </div>
     </div>
   );

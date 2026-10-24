@@ -2,7 +2,7 @@
 // key missing from, or extra in, the Chinese catalog does not compile.
 // A count-dependent message is two keys, `name#one` and `name#other`, read with `tn`.
 export const en = {
-  "team.work.title": "Work",
+  "team.work.title": "Board",
   "team.work.attention": "Attention",
   "team.work.clear": "Nothing waiting for you",
   "team.work.headline#one": "{count} item waiting for you",
@@ -1809,6 +1809,13 @@ export const en = {
   "panel.desk": "Desk",
   "panel.tasks": "Tasks",
   "panel.recentFiles": "Recent outputs",
+  "board.lane.queued": "Queued",
+  "board.lane.working": "In progress",
+  "board.lane.waiting": "Waiting on you",
+  "board.lane.done": "Done",
+  "board.byState": "By state",
+  "board.byMember": "By colleague",
+  "board.research": "Research only",
   "inbox.title": "Waiting on you",
   "board.title": "Board",
   "sidebar.groups": "Groups",

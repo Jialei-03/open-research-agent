@@ -85,27 +85,26 @@ describe("team work projection view", () => {
           children: createElement(TeamWorkView, { team, work: value, go() {} }),
         }),
       );
-    it(`${locale} groups by priority, collapses completed work and links each conversation`, () => {
+    it(`${locale} lays the work out as a board, review under way, each card linked`, () => {
       const html = render();
-      let previous = -1;
-      for (const group of workGroups) {
-        const index = html.indexOf(`Topic ${group}`);
-        expect(index).toBeGreaterThan(previous);
-        previous = index;
-        expect(html).toContain(tn(`team.work.group.${group}`, 1));
+      const lane = (key: string) =>
+        html.indexOf(`aria-label="${t(`board.lane.${key}`)}"`);
+      const order = ["queued", "working", "waiting", "done"].map(lane);
+      expect(order.every((index) => index >= 0)).toBe(true);
+      expect([...order].sort((a, b) => a - b)).toEqual(order);
+      const where = (group: string) => html.indexOf(`Topic ${group}`);
+      // Review is under way: it sits in the in-progress column.
+      expect(where("review")).toBeGreaterThan(lane("working"));
+      expect(where("review")).toBeLessThan(lane("waiting"));
+      expect(where("done")).toBeGreaterThan(lane("done"));
+      for (const group of workGroups)
         expect(html).toContain(
           `href="#${teamHash(wid, cid, `thread-${group}`)}"`,
         );
-      }
-      expect(html).toMatch(
-        /<details[^>]*><summary>[^<]+<\/summary><ul><li><a[^>]*thread-done/,
-      );
-      expect(html).not.toMatch(/<details[^>]*\bopen/);
       expect(html).toContain(tn("team.work.headline", 1));
       expect(html).toContain(t("team.work.stuck"));
       expect(html).toContain("draft.md");
       expect(html).toContain('title="Ada"');
-      expect(html).toContain("Research R");
       expect(html).toContain(tn("team.work.asks", 2));
       expect(html).not.toContain(t("team.work.partial"));
     });
