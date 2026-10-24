@@ -90,19 +90,25 @@ export function ResearchProject({
   go,
   backHash,
   embedded = false,
+  locateId,
 }: {
   id: string;
   go(hash: string): void;
   backHash?: string;
   embedded?: boolean;
+  locateId?: string;
 }) {
   const { t, locale } = useI18n();
   const { owner } = useContext(AppActions);
   const draftKey = `ora-research-draft:${owner || "local"}:${id}`;
   const [models, setModels] = useState<ModelRow[]>([]);
+  const [modelsKnown, setModelsKnown] = useState(false);
   useEffect(() => {
     readModels().then(
-      (s) => setModels(s.models),
+      (s) => {
+        setModels(s.models);
+        setModelsKnown(true);
+      },
       () => setModels([]),
     );
   }, []);
@@ -155,6 +161,7 @@ export function ResearchProject({
   );
   const scroller = useRef<HTMLDivElement>(null);
   const pinned = useRef(true);
+  const located = useRef("");
 
   useEffect(() => {
     setRecord(false);
@@ -239,6 +246,23 @@ export function ResearchProject({
     if (el && pinned.current) el.scrollTop = el.scrollHeight;
   }, [items.length, pending, detail?.sprints, runs]);
 
+  const locatedItem = items.some((item) => item.id === locateId)
+    ? locateId
+    : events.find((event) => event.id === locateId)?.sprint_id;
+  useLayoutEffect(() => {
+    if (!locatedItem || located.current === locatedItem) return;
+    const row = [
+      ...(scroller.current?.querySelectorAll<HTMLElement>(
+        "[data-research-item]",
+      ) || []),
+    ].find((element) => element.dataset.researchItem === locatedItem);
+    if (!row) return;
+    pinned.current = false;
+    row.scrollIntoView({ block: "center" });
+    row.focus({ preventScroll: true });
+    located.current = locatedItem;
+  }, [locatedItem, items]);
+
   const fail = (error: unknown) =>
     toast.show({
       message: error instanceof Error ? error.message : String(error),
@@ -254,6 +278,8 @@ export function ResearchProject({
     changeText("");
     pinned.current = true;
     try {
+      if (modelId && modelId !== detail?.project.model_config_id)
+        await moveModel(id, modelId);
       await sendMessage(id, words);
       refreshResearchNavigation();
       refresh();
@@ -394,6 +420,10 @@ export function ResearchProject({
   const fetchNote =
     detail.datasets.find((d) => d.status === "pending" && d.note)?.note ?? "";
   const finished = p.status === "finished" && p.stage === "done";
+  const modelId =
+    models.find((model) => model.id === p.model_config_id)?.id ||
+    models[0]?.id ||
+    "";
   // What "/" offers on a research: how it runs, its report, its model.
   const commands: SlashCommand[] = [
     ...(p.status === "paused"
@@ -452,9 +482,7 @@ export function ResearchProject({
       return typeof said?.detail.text === "string" ? said.detail.text : "";
     }),
     // A finished research has no next round to change the model of.
-    ...(finished
-      ? []
-      : modelCommands(t, models, p.model_config_id, chooseModel)),
+    ...(finished ? [] : modelCommands(t, models, modelId, chooseModel)),
   ];
   const pendingPlan = items.find(
     (item) =>
@@ -623,6 +651,7 @@ export function ResearchProject({
                     computes={computes}
                     actions={actions}
                     runs={runsBySprint}
+                    locateId={locatedItem || undefined}
                   />
                 )}
                 <ThreadView
@@ -631,6 +660,7 @@ export function ResearchProject({
                   computes={computes}
                   actions={actions}
                   runs={runsBySprint}
+                  locateId={locatedItem || undefined}
                 />
                 {pending && <div className={styles.mine}>{pending}</div>}
                 {waitingData && p.stage === "experiments" && (
@@ -677,6 +707,7 @@ export function ResearchProject({
                 onChange={changeText}
                 onSend={say}
                 busy={!!pending}
+                needsModel={modelsKnown && models.length === 0}
                 label={t("research.composer.label")}
                 placeholder={t("research.composer.continue")}
                 leading={
@@ -697,7 +728,7 @@ export function ResearchProject({
                   !finished && (
                     <ModelPicker
                       models={models}
-                      value={p.model_config_id}
+                      value={modelId}
                       onChange={(modelId) => void chooseModel(modelId)}
                       label={t("commands.model")}
                     />

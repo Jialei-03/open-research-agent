@@ -6,10 +6,18 @@ import {
   type NodeChange,
   type XYPosition,
 } from "@xyflow/react";
-import type { Translator } from "../../../i18n/i18n";
+import type { MessageKey, Translator } from "../../../i18n/i18n";
+import {
+  layoutWorkflow,
+  savedNodeIds,
+  type EdgeCurve,
+} from "./workflow-layout";
 
 // References and payloads follow docs/design/agent-team-contract.md.
 export interface WorkflowMember {
+  avatar?: string;
+  avatar_url?: string | null;
+  avatar_seed?: string;
   id: string;
   name: string;
   kind: "human" | "agent";
@@ -37,6 +45,16 @@ export const RULE_ACTIONS = [
   "wait_for_owner",
   "post",
 ] as const;
+// Legacy step actions can also appear in imported workflow data.
+const ACTION_LABELS: Record<string, MessageKey> = {
+  wake: "teamWorkflow.action.wake",
+  review: "teamWorkflow.action.review",
+  wait_for_owner: "teamWorkflow.action.wait_for_owner",
+  post: "teamWorkflow.action.post",
+  conclusion: "teamWorkflow.action.conclusion",
+  retrospective: "teamWorkflow.action.retrospective",
+  child_research: "teamWorkflow.action.child_research",
+};
 export const MESSAGE_KINDS = [
   "text",
   "result",
@@ -68,7 +86,7 @@ export interface WorkflowRule {
     channel?: string;
     text?: string;
   };
-  limit: { per_thread: number };
+  limit?: { per_thread?: number };
   position?: XYPosition;
 }
 export interface Workflow {
@@ -102,13 +120,21 @@ export type WorkflowNode = Node<
     status?: WorkflowRuntime["members"][string];
     event?: WorkflowRule["when"]["event"];
     human?: boolean;
+    member?: WorkflowMember;
     when?: WorkflowRule["when"];
   },
   "workflow"
 >;
+type WorkflowEdgeKind =
+  | WorkflowRule["then"]["action"]
+  | "return"
+  | "subscription"
+  | "schedule";
 export type WorkflowEdge = Edge<{
   rule: string;
-  kind: WorkflowRule["then"]["action"] | "return" | "subscription" | "schedule";
+  kind: WorkflowEdgeKind;
+  rules?: { rule: string; kind: WorkflowEdgeKind }[];
+  curve?: EdgeCurve;
 }>;
 
 export const nodeId = (kind: WorkflowNode["data"]["kind"], id: string) =>
@@ -139,36 +165,31 @@ export function ruleSummary(
     rule.when.from_member || rule.when.from_role
       ? memberName(rule.when.from_member, rule.when.from_role)
       : "",
-    t(`teamWorkflow.event.${rule.when.event}`),
-    rule.when.kind ? t(`teamWorkflow.kind.${rule.when.kind}`) : "",
+    RULE_EVENTS.includes(rule.when.event)
+      ? t(`teamWorkflow.event.${rule.when.event}`)
+      : "",
+    rule.when.kind && MESSAGE_KINDS.includes(rule.when.kind)
+      ? t(`teamWorkflow.kind.${rule.when.kind}`)
+      : "",
     rule.when.event === "schedule"
       ? `${rule.when.cron ?? ""} ${rule.when.timezone ?? ""}`
       : "",
   ]
     .filter(Boolean)
     .join(" · ");
-  const target =
-    rule.then.action === "post"
+  const actionLabel = Object.hasOwn(ACTION_LABELS, rule.then.action)
+    ? t(ACTION_LABELS[rule.then.action])
+    : "";
+  const target = !actionLabel
+    ? ""
+    : rule.then.action === "post"
       ? channelName(rule.then.channel)
       : rule.then.action === "wait_for_owner"
         ? t("teamWorkflow.me")
         : rule.then.subscribers
           ? t("members.subscribers")
           : memberName(rule.then.member, rule.then.role);
-  const action = [
-    target,
-    t(`teamWorkflow.action.${rule.then.action}`),
-    rule.then.instruction,
-    rule.then.text,
-    rule.then.action === "review" && rule.then.on_fail
-      ? t("teamWorkflow.returnTo", {
-          name: memberName(rule.then.on_fail, rule.then.on_fail),
-          count: rule.then.max_rounds ?? 3,
-        })
-      : "",
-  ]
-    .filter(Boolean)
-    .join(" · ");
+  const action = [target, actionLabel].filter(Boolean).join(" · ");
   return t("teamWorkflow.summary", { source, action });
 }
 
@@ -178,7 +199,7 @@ export function newRule(id: string): WorkflowRule {
     enabled: true,
     when: { event: "message" },
     then: { action: "wake" },
-    limit: { per_thread: 10 },
+    limit: { per_thread: 0 },
   };
 }
 
@@ -209,6 +230,60 @@ export function edgeToRule(
   return workflow.rules.find((rule) => rule.id === edge.data?.rule);
 }
 
+/** Group only the canvas projection; persisted rule identities and order stay intact. */
+export function mergeWorkflowEdges(edges: WorkflowEdge[]): WorkflowEdge[] {
+  const groups = new Map<string, WorkflowEdge>();
+  for (const edge of edges) {
+    if (!edge.data) continue;
+    const key = JSON.stringify([edge.source, edge.target]);
+    const entries = edge.data.rules ?? [
+      { rule: edge.data.rule, kind: edge.data.kind },
+    ];
+    const existing = groups.get(key);
+    if (existing) existing.data!.rules!.push(...entries);
+    else
+      groups.set(key, { ...edge, data: { ...edge.data, rules: [...entries] } });
+  }
+  return [...groups.values()];
+}
+
+export function edgeRules(
+  edge: WorkflowEdge,
+  workflow: Workflow,
+): WorkflowRule[] {
+  const ids = new Set(
+    (edge.data?.rules ?? (edge.data ? [edge.data] : [])).map(
+      (entry) => entry.rule,
+    ),
+  );
+  return workflow.rules.filter((rule) => ids.has(rule.id));
+}
+
+export function workflowEdgeLabel(
+  edge: WorkflowEdge,
+  t: Translator["t"],
+): string {
+  const counts = new Map<WorkflowEdgeKind, number>();
+  for (const { kind } of edge.data?.rules ?? (edge.data ? [edge.data] : []))
+    counts.set(kind, (counts.get(kind) ?? 0) + 1);
+  return [...counts]
+    .map(([kind, count]) => {
+      const label = t(
+        kind === "return"
+          ? "teamWorkflow.return"
+          : kind === "subscription"
+            ? "teamWorkflow.subscription"
+            : kind === "schedule"
+              ? "teamWorkflow.event.schedule"
+              : `teamWorkflow.action.${kind}`,
+      );
+      return count === 1
+        ? label
+        : t("teamWorkflow.edgeCount", { label, count });
+    })
+    .join(" · ");
+}
+
 export function workflowToFlow(
   workflow: Workflow,
   members: WorkflowMember[],
@@ -229,15 +304,16 @@ export function workflowToFlow(
       nodes.set(id, {
         id,
         type: "workflow",
-        position: position ?? {
-          x: (nodes.size % 3) * 300,
-          y: Math.floor(nodes.size / 3) * 180,
-        },
+        position: position ?? { x: 0, y: 0 },
         data: {
           kind,
           ref,
           name,
           event,
+          member:
+            kind === "member"
+              ? members.find((item) => item.id === ref)
+              : undefined,
           human:
             kind === "member" &&
             members.some((item) => item.id === ref && item.kind === "human"),
@@ -310,7 +386,7 @@ export function workflowToFlow(
             target: subscriberTarget,
             sourceHandle: "out",
             targetHandle: "in",
-            type: "smoothstep",
+            type: "workflow",
             data: { rule: rule.id, kind: "subscription" },
             focusable: true,
             reconnectable: false,
@@ -339,7 +415,7 @@ export function workflowToFlow(
       target,
       sourceHandle: "out",
       targetHandle: "in",
-      type: "smoothstep",
+      type: "workflow",
       data: { rule: rule.id, kind },
       focusable: true,
       reconnectable: false,
@@ -351,16 +427,19 @@ export function workflowToFlow(
           id: `return:${rule.id}`,
           source: target,
           target: back,
-          sourceHandle: "return-out",
-          targetHandle: "return-in",
-          type: "smoothstep",
+          sourceHandle: "back-out",
+          targetHandle: "back-in",
+          type: "workflow",
           data: { rule: rule.id, kind: "return" },
           focusable: true,
           reconnectable: false,
         });
     }
   }
-  return { nodes: [...nodes.values()], edges };
+  return {
+    nodes: layoutWorkflow([...nodes.values()], edges, savedNodeIds(workflow)),
+    edges,
+  };
 }
 
 /** A connection seeds the shared editor; only Save adds it to the workflow. */
@@ -426,13 +505,26 @@ export function updateCanvasNodes(
         change.type === "position" && change.position && !change.dragging,
     )
   )
-    onChange(layoutFromNodes(workflow, next));
+    onChange(
+      layoutFromNodes(
+        workflow,
+        next.filter((node) =>
+          changes.some(
+            (change) =>
+              change.type === "position" &&
+              change.id === node.id &&
+              change.position &&
+              !change.dragging,
+          ),
+        ),
+      ),
+    );
   return next;
 }
 
 export function validateRule(rule: WorkflowRule): boolean {
-  if (!Number.isSafeInteger(rule.limit.per_thread) || rule.limit.per_thread < 1)
-    return false;
+  const perThread = rule.limit?.per_thread ?? 0;
+  if (!Number.isSafeInteger(perThread) || perThread < 0) return false;
   if (rule.when.event === "schedule") {
     if (!validCron(rule.when.cron ?? "") || !rule.when.timezone) return false;
     try {
@@ -458,8 +550,8 @@ export function validateRule(rule: WorkflowRule): boolean {
   if (
     rule.then.action === "review" &&
     (!rule.then.on_fail ||
-      !Number.isSafeInteger(rule.then.max_rounds) ||
-      rule.then.max_rounds! < 1)
+      !Number.isSafeInteger(rule.then.max_rounds ?? 0) ||
+      (rule.then.max_rounds ?? 0) < 0)
   )
     return false;
   return (
