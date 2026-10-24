@@ -82,17 +82,19 @@
   transform: translateY(-50%);
 }
 
+/* The one search field: radius 10, the card's surface, a hairline lift (as settings). */
 .search input {
   height: var(--ui-control-md);
   padding-left: var(--ui-space-40);
-  border: 1px solid var(--ui-edge-subtle);
-  border-radius: var(--ui-r-pill);
-  background: var(--ui-bg-2);
+  border: 0;
+  border-radius: var(--ui-r-10);
+  background: var(--ui-bg);
+  box-shadow: var(--ui-elev-1);
   font-size: var(--ui-text-13);
 }
 
 .search input:focus {
-  border-color: var(--ui-edge);
+  box-shadow: 0 0 0 1.5px var(--ui-edge-strong);
 }
 
 .spacer {

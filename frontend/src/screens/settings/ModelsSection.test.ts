@@ -41,15 +41,15 @@ function renderSettings(hash: string) {
 }
 
 it("ordinary model settings do not automatically open the add form", () => {
-  const view = renderSettings("#customize/models");
+  const view = renderSettings("#settings/models");
   expect(view.form).toBeUndefined();
-  expect(view.location.hash).toBe("#customize/models");
+  expect(view.location.hash).toBe("#settings/models");
   expect(view.fetch).not.toHaveBeenCalled();
 });
 
 it("onboarding opens the existing add form and returns to the exact conversation only after connection", () => {
   const returnTo = "new?workspace=folder&collection=project";
-  const hash = `#customize/models?${new URLSearchParams({ returnTo })}`;
+  const hash = `#settings/models?${new URLSearchParams({ returnTo })}`;
   const view = renderSettings(hash);
   expect(view.form).toBeDefined();
   expect(view.location.hash).toBe(hash);

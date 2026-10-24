@@ -36,9 +36,6 @@ import { threadTree } from "./thread-tree";
 import type { NavigationResearch } from "./navigation-api";
 import styles from "./Workspace.module.css";
 import { getTeam, TEAM_EVENT } from "./team-api";
-import { needsYou, type AttentionMessage } from "./navigation-attention";
-import { sidebarId } from "../../app/sidebar-entries";
-import nav from "./TeamNavigation.module.css";
 import { notifyTeamReminders } from "./team-reminder-notifications";
 
 const EMPTY: Navigation = { workspaces: [], collections: [] };
@@ -161,64 +158,6 @@ export function ResearchState({ research }: { research: NavigationResearch }) {
       />
     );
   return null;
-}
-
-export function ResearchAttention({ go }: { go(hash: string): void }) {
-  const { t } = useI18n();
-  const { data } = useResearchNavigation();
-  const [messages, setMessages] = useState<AttentionMessage[]>([]);
-  useEffect(() => {
-    let stale = false;
-    const load = () =>
-      Promise.all(
-        data.workspaces
-          .filter((w) => !w.archived)
-          .map(async (w) => {
-            const result = await getTeam(w.id);
-            return result.notifications.map((m) => ({
-              ...m,
-              workspace_id: w.id,
-            }));
-          }),
-      ).then(
-        (results) => {
-          if (!stale) setMessages(results.flat());
-        },
-        () => undefined,
-      );
-    void load();
-    window.addEventListener(TEAM_EVENT, load);
-    return () => {
-      stale = true;
-      window.removeEventListener(TEAM_EVENT, load);
-    };
-  }, [data.workspaces]);
-  const items = needsYou(data, messages);
-  if (!items.length) return null;
-  return (
-    <section
-      className={nav.attention}
-      data-sidebar-place="attention"
-      data-id={sidebarId("attention")}
-      aria-label={t("sidebar.needsYou")}
-    >
-      <div className={nav.heading}>{t("sidebar.needsYou")}</div>
-      <div className={nav.attentionList}>
-        {items.map((item) => (
-          <a
-            key={item.id}
-            className={nav.attentionRow}
-            data-id={sidebarId("attention-item")}
-            href={`#${item.hash}`}
-            onClick={followLink(go, item.hash)}
-          >
-            <span>{item.title}</span>
-            <small>{t("sidebar.waiting")}</small>
-          </a>
-        ))}
-      </div>
-    </section>
-  );
 }
 
 export function ResearchTree({

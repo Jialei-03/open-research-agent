@@ -137,7 +137,7 @@ export function MachinesSection() {
 
   const header = (
     <CustomizeHeader
-      title={t("customize.machines")}
+      title={t("settings.category.environments")}
       query={query}
       onQuery={setQuery}
       action={

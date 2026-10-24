@@ -327,6 +327,9 @@ def post(
     if workspace.archived or channel.archived:
         raise ValueError("团队或频道已归档 / Team or channel archived")
     text = normalize(text).strip()
+    # A direct message is one conversation: no threads.
+    if channel.member_id:
+        thread_id, also_channel = None, False
     if (
         not text and not any((data or {}).get(k) for k in ("forward", "quote"))
     ) or len(text) > 12000:
@@ -600,28 +603,20 @@ def history(d, workspace, channel, thread_id=None):
     from .team_message_features import reactions
 
     root = root_of(d, workspace, channel, thread_id)
+    # A direct message has no threads; older replies there read in order.
+    flat = bool(channel.member_id) and not thread_id
     rows = [
-        message_out(d, m)
+        {**message_out(d, m), **({"thread_id": None, "replies": 0} if flat else {})}
         for m in d.scalars(
             select(TeamMessage)
             .where(
                 TeamMessage.channel_id == channel.id,
-                TeamMessage.thread_id == thread_id,
+                *([] if flat else [TeamMessage.thread_id == thread_id]),
                 TeamMessage.kind != "reminder",
             )
             .order_by(TeamMessage.created_at, TeamMessage.id)
         )
     ]
-    if not thread_id and channel.key == "experiments":
-        rows += [
-            research_root(p, channel, d)
-            for p in d.scalars(
-                select(ResearchProject).where(
-                    ResearchProject.workspace_id == workspace.id,
-                    ResearchProject.owner == workspace.owner,
-                )
-            )
-        ]
     if not thread_id and channel.key == "dm:advisor":
         sessions = select(AgentSession.id).where(
             AgentSession.workspace_id == workspace.id,

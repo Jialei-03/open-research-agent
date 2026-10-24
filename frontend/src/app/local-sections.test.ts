@@ -13,15 +13,9 @@ describe("local app sections", () => {
       expect(localSection(parseAppRoute(hash))).toBe("materials");
     expect(localSection(parseAppRoute("schedules"))).toBe("tasks");
     expect(localSection(parseAppRoute("tasks/waiting"))).toBe("tasks");
-    expect(localSection(parseAppRoute("customize/models"))).toBe("customize");
+    expect(localSection(parseAppRoute("customize/roles"))).toBe("customize");
     expect(localSection(parseAppRoute("board"))).toBe("research");
-    for (const section of [
-      "playbook",
-      "roles",
-      "machines",
-      "tracking",
-      "models",
-    ]) {
+    for (const section of ["playbook", "roles", "workflows"]) {
       expect(localSection(parseAppRoute(`customize/${section}`))).toBe(
         "customize",
       );

@@ -98,7 +98,9 @@ export async function mockTeam(
               ? []
               : url.pathname.includes(advisorDM)
                 ? options.history?.() || []
-                : roots,
+                : // The channel no longer lists research roots: a research opens
+                  // as a thread (thread=research:<id>), or from the sidebar.
+                  [],
           root:
             roots.find((r) => r.id === thread) ||
             options

@@ -183,19 +183,30 @@ for (const theme of ["light", "dark"] as const) {
         name: "侧栏",
         exact: true,
       });
-      // Below 900px the sidebar is a rail of the same five links until it is opened.
+      // Below 900px the sidebar is a rail of the same links until it is opened.
       if (width < 900)
         await sidebar
           .getByRole("button", { name: "展开侧栏", exact: true })
           .click();
+      // A new research starts in the open project: its tile is the selected one.
       await expect(
-        sidebar.getByRole("link", { name: "新研究", exact: true }),
+        sidebar.getByRole("link", { name: "UI project", exact: true }),
       ).toHaveAttribute("aria-current", "page");
-      for (const name of ["研究", "资料", "定时任务", "自定义", "设置"]) {
+      for (const name of [
+        "全部项目",
+        "UI project",
+        "资料",
+        "定时任务",
+        "自定义",
+        "设置",
+      ]) {
         await expect(
           sidebar.getByRole("link", { name, exact: true }).first(),
         ).toBeVisible();
       }
+      await expect(
+        sidebar.getByRole("button", { name: "新建项目", exact: true }),
+      ).toBeVisible();
       if (width < 900)
         await sidebar
           .getByRole("button", { name: "收起侧栏", exact: true })
@@ -211,9 +222,6 @@ for (const theme of ["light", "dark"] as const) {
         ["schedules/7f3c2a10-1b2c-4d5e-8f90-a1b2c3d4e5f6", "Daily papers"],
         ["customize/playbook", "研究手册"],
         ["customize/roles", "研究角色"],
-        ["customize/machines", "机器"],
-        ["customize/tracking", "实验追踪"],
-        ["customize/models", "模型"],
       ];
       let left: number | undefined;
       for (const [hash, title] of pages) {
@@ -231,6 +239,26 @@ for (const theme of ["light", "dark"] as const) {
         expect(box.x).toBeCloseTo(left, 0);
         expect(
           await page.locator('button[class*="_primary_"]:visible').count(),
+        ).toBeLessThanOrEqual(1);
+        await noOverflow(page);
+      }
+      // Models, research environments and tracking are lists inside the settings window,
+      // each bringing its own title.
+      for (const [category, title] of [
+        ["models", "模型"],
+        ["environments", "研究环境"],
+        ["tracking", "实验追踪"],
+      ]) {
+        await page.goto(`/#settings/${category}`);
+        const dialog = page.getByRole("dialog", { name: "设置", exact: true });
+        const heading = dialog
+          .getByRole("main")
+          .getByRole("heading", { name: title, level: 1, exact: true });
+        await expect(heading).toBeVisible();
+        await expect(heading).toHaveCSS("font-size", "24px");
+        await expect(heading).toHaveCSS("font-weight", "400");
+        expect(
+          await dialog.locator('button[class*="_primary_"]:visible').count(),
         ).toBeLessThanOrEqual(1);
         await noOverflow(page);
       }
@@ -394,7 +422,7 @@ test("keyboard reaches import and destructive menus; tracking cancellation keeps
   await deleting.getByRole("button", { name: "取消" }).click();
   await expect(deleting).toBeHidden();
 
-  await page.goto("/#customize/tracking");
+  await page.goto("/#settings/tracking");
   await page.getByRole("button", { name: "W&B 的更多操作" }).focus();
   await page.keyboard.press("Enter");
   await page.getByRole("menuitem", { name: "编辑", exact: true }).click();
@@ -470,7 +498,7 @@ test("orphaned direct channels leave navigation and saved addresses usable", asy
   );
   await page.goto("/#new");
   const sidebar = page.getByRole("navigation", { name: "侧栏", exact: true });
-  const direct = sidebar.getByRole("group", { name: "消息", exact: true });
+  const direct = sidebar.getByRole("group", { name: "私聊", exact: true });
   await expect(
     direct.getByRole("link", { name: "导师", exact: true }),
   ).toBeVisible();
@@ -485,7 +513,7 @@ test("orphaned direct channels leave navigation and saved addresses usable", asy
   await advisor.click();
   await expect(page).toHaveURL(new RegExp(`#team/${WORKSPACE}/${advisorDM}$`));
   await expect(advisor).toHaveAttribute("aria-current", "page");
-  await sidebar.getByRole("link", { name: "新研究", exact: true }).click();
+  await sidebar.getByRole("button", { name: "新研究", exact: true }).click();
   await expect(page).toHaveURL(new RegExp(`#new\\?workspace=${WORKSPACE}$`));
   const originalAddress = page.url();
   // A background tab is reported by the context, even when it has no opener.
@@ -507,6 +535,6 @@ test("orphaned direct channels leave navigation and saved addresses usable", asy
     page.getByRole("textbox", { name: "消息", exact: true }),
   ).toHaveAttribute("placeholder", "发送给 Former member");
   await expect(
-    sidebar.getByRole("link", { name: "新研究", exact: true }),
+    sidebar.getByRole("button", { name: "新研究", exact: true }),
   ).toBeVisible();
 });

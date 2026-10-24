@@ -254,7 +254,7 @@ export function GuideTab({
       return (
         <div className={styles.message}>
           <p className={styles.note}>{t("reader.guide.noModel")}</p>
-          <a className={styles.link} href="#customize/models">
+          <a className={styles.link} href="#settings/models">
             {t("reader.guide.openSettings")}
           </a>
         </div>

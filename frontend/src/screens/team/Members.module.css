@@ -16,10 +16,6 @@
   gap: var(--ui-space-12);
   margin-bottom: var(--ui-space-24);
 }
-.toolbar input[type="search"] {
-  border-radius: var(--ui-r-pill);
-  height: var(--ui-control-md);
-}
 .detailHeader {
   display: flex;
   align-items: center;
@@ -224,4 +220,9 @@ fieldset.field legend {
   .editorColumns {
     grid-template-columns: minmax(0, 1fr);
   }
+}
+
+.find {
+  composes: search from "../Management.module.css";
+  width: 100%;
 }

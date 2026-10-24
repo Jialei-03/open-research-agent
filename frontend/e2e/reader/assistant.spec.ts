@@ -633,6 +633,6 @@ test("without a model the composer says where to add one", async ({ page }) => {
   await expect(sendButton(page)).toBeDisabled();
   await expect(
     main.getByRole("link", { name: "添加模型", exact: true }),
-  ).toHaveAttribute("href", "#customize/models");
+  ).toHaveAttribute("href", "#settings/models");
   expect(server.created).toEqual([]);
 });

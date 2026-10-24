@@ -505,7 +505,7 @@ test("without a model, 对照 says to add one in settings and asks for nothing",
   await expect(column(page, 1)).toContainText("未配置模型");
   await expect(
     column(page, 1).getByRole("link", { name: "添加模型" }),
-  ).toHaveAttribute("href", "#customize/models");
+  ).toHaveAttribute("href", "#settings/models");
   await page.waitForTimeout(1000);
   expect(service.posts).toEqual([]);
 });

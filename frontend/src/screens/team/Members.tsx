@@ -1,9 +1,16 @@
 import { useEffect, useState } from "react";
-import { ArrowLeft, MessageSquare, MoreHorizontal, Plus } from "lucide-react";
+import {
+  ArrowLeft,
+  MessageSquare,
+  MoreHorizontal,
+  Plus,
+  Search,
+} from "lucide-react";
 import { useI18n } from "../../i18n/I18nProvider";
-import { Button, Dialog, IconButton, Menu, TextField } from "../../ui";
+import { Button, Dialog, IconButton, Menu, TextArea } from "../../ui";
 import {
   addTeamMember,
+  draftTeamMember,
   deleteTeamMember,
   editTeamMember,
   readMember,
@@ -49,7 +56,32 @@ export function Members({
   const [editing, setEditing] = useState<{
     member?: TeamMember;
     library?: LibraryMember;
+    drafted?: MemberConfig;
   } | null>(null);
+  // Hiring: one sentence, a drafted agent file, then the usual editor.
+  const [hiring, setHiring] = useState(false);
+  const [wanted, setWanted] = useState("");
+  const [drafting, setDrafting] = useState(false);
+  const [hireError, setHireError] = useState("");
+  const hire = async () => {
+    if (!wanted.trim()) {
+      setHiring(false);
+      setEditing({});
+      return;
+    }
+    setDrafting(true);
+    setHireError("");
+    try {
+      const drafted = await draftTeamMember(team.workspace_id, wanted.trim());
+      setHiring(false);
+      setWanted("");
+      setEditing({ drafted: drafted.config });
+    } catch (reason) {
+      setHireError(String(reason));
+    } finally {
+      setDrafting(false);
+    }
+  };
   const [detail, setDetail] = useState<MemberDetail | null>(null);
   const [error, setError] = useState("");
   const [confirm, setConfirm] = useState<{
@@ -290,20 +322,23 @@ export function Members({
         <>
           <div className={styles.toolbar}>
             <div className={styles.search}>
-              <TextField
-                label={t("members.search")}
-                hideLabel
-                type="search"
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-              />
+              <label className={styles.find}>
+                <Search size={16} aria-hidden />
+                <input
+                  type="search"
+                  value={query}
+                  placeholder={t("members.search")}
+                  aria-label={t("members.search")}
+                  onChange={(e) => setQuery(e.target.value)}
+                />
+              </label>
             </div>
             <Button
               variant="primary"
               icon={Plus}
-              onClick={() => setEditing({})}
+              onClick={() => setHiring(true)}
             >
-              {t("members.add")}
+              {t("members.hire")}
             </Button>
           </div>
           <ul className={`${styles.list} ${styles.roster}`}>
@@ -406,6 +441,7 @@ export function Members({
         <MemberEditor
           key={editing.library?.id || editing.member?.id || "new"}
           initial={
+            editing.drafted ??
             editing.library?.config ??
             (editing.member ? memberDraft(editing.member) : undefined)
           }
@@ -460,6 +496,46 @@ export function Members({
           }}
         />
       )}
+      <Dialog
+        open={hiring}
+        title={t("members.hire")}
+        onClose={() => !drafting && setHiring(false)}
+        footer={
+          <>
+            <Button
+              variant="ghost"
+              disabled={drafting}
+              onClick={() => {
+                setHiring(false);
+                setEditing({});
+              }}
+            >
+              {t("members.blank")}
+            </Button>
+            <Button
+              variant="primary"
+              loading={drafting}
+              disabled={!wanted.trim()}
+              onClick={() => void hire()}
+            >
+              {t("members.draft")}
+            </Button>
+          </>
+        }
+      >
+        <TextArea
+          label={t("members.wanted")}
+          value={wanted}
+          rows={3}
+          autoFocus
+          onChange={(event) => setWanted(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === "Enter" && (event.metaKey || event.ctrlKey))
+              void hire();
+          }}
+        />
+        {hireError && <p role="alert">{hireError}</p>}
+      </Dialog>
       <Dialog
         open={!!confirm}
         title={t(

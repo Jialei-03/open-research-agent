@@ -22,7 +22,7 @@ import { plainCommand } from "../process/model";
 import { RunCard, trackerLink, type ThreadActions } from "./ThreadView";
 import styles from "./Talk.module.css";
 
-export type RecordTab = "progress" | "changes" | "experiments";
+export type RecordTab = "progress" | "files" | "changes" | "experiments";
 
 export function RecordPanel({
   detail,
@@ -59,7 +59,6 @@ export function RecordPanel({
 }) {
   const { t } = useI18n();
   const { data } = useResearchNavigation();
-  const [sources, setSources] = useState(false);
   const p = detail.project;
   const children = data.workspaces
     .flatMap((w) => w.researches)
@@ -88,6 +87,11 @@ export function RecordPanel({
               value: "progress",
               label: t("research.record.progress"),
               panelId: panelId("progress"),
+            },
+            {
+              value: "files",
+              label: t("panel.files"),
+              panelId: panelId("files"),
             },
             {
               value: "changes",
@@ -123,6 +127,13 @@ export function RecordPanel({
             onBack={() => onOutputFile("")}
             actions={null}
           />
+        ) : tab === "files" ? (
+          <div className={styles.recordBody}>
+            <FilesPanel
+              projectId={p.id}
+              settled={settledKey(detail.sprints, detail.jobs)}
+            />
+          </div>
         ) : tab === "changes" ? (
           <ReviewChanges
             detail={detail}
@@ -165,7 +176,10 @@ export function RecordPanel({
                   ? nodes.map((node) => (
                       <div key={node.id} className={styles.nodeRow}>
                         <span>{node.title}</span>
-                        <small>
+                        <small
+                          className={styles.nodeState}
+                          data-status={node.status}
+                        >
                           {t(`research.node.${node.status}` as MessageKey)}
                         </small>
                       </div>
@@ -216,7 +230,7 @@ export function RecordPanel({
                     icon={Plus}
                     label={t("research.attach")}
                     size="sm"
-                    onClick={() => setSources(true)}
+                    onClick={() => onTab("files")}
                   />
                 </h3>
                 {detail.datasets.map((source) => (
@@ -235,17 +249,6 @@ export function RecordPanel({
           </div>
         )}
       </div>
-      <Dialog
-        open={sources}
-        title={t("research.panel.sources")}
-        onClose={() => setSources(false)}
-        size="lg"
-      >
-        <FilesPanel
-          projectId={p.id}
-          settled={settledKey(detail.sprints, detail.jobs)}
-        />
-      </Dialog>
       <Dialog
         open={!!selected}
         title={t("research.record.run")}

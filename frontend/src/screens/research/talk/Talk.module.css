@@ -1263,6 +1263,31 @@
   font-size: var(--ui-text-12);
 }
 
+/* A hypothesis's state, coloured like a task's. */
+.nodeRow .nodeState {
+  justify-self: start;
+  height: 20px;
+  padding: 0 var(--ui-space-8);
+  border-radius: var(--ui-r-pill);
+  background: var(--ui-fill);
+  line-height: 20px;
+}
+
+.nodeState[data-status="active"] {
+  background: color-mix(in oklab, var(--ui-info-text) 14%, transparent);
+  color: var(--ui-info-text);
+}
+
+.nodeState[data-status="supported"] {
+  background: color-mix(in oklab, var(--ui-success-text) 14%, transparent);
+  color: var(--ui-success-text);
+}
+
+.nodeState[data-status="refuted"] {
+  background: color-mix(in oklab, var(--ui-danger-text) 12%, transparent);
+  color: var(--ui-danger-text);
+}
+
 .runRow {
   display: flex;
   flex-direction: column;

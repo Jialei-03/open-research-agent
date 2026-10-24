@@ -1,6 +1,6 @@
 import {
+  Sparkle,
   ArrowLeft,
-  Folder,
   Plus,
   Pencil,
   GitFork,
@@ -65,6 +65,7 @@ import { JumpToLatest } from "../../reader/JumpToLatest";
 import { OPEN_FILES_EVENT } from "./files/files-api";
 import type { SlashCommand } from "../../lib/slash";
 import { readModels, type ModelRow } from "../setup/model-api";
+import { useModelRevision } from "../setup/useModelRevision";
 import { copyCommand, modelCommands } from "../../lib/composer-commands";
 import { Composer } from "./talk/Composer";
 import { ModelPicker } from "./talk/Pickers";
@@ -91,7 +92,7 @@ function readRecord(key: string): { open: boolean; tab: RecordTab } {
     const saved = JSON.parse(localStorage.getItem(key) || "null");
     return {
       open: saved?.open === true,
-      tab: ["progress", "changes", "experiments"].includes(saved?.tab)
+      tab: ["progress", "files", "changes", "experiments"].includes(saved?.tab)
         ? saved.tab
         : "progress",
     };
@@ -123,6 +124,7 @@ export function ResearchProject({
   const draftKey = `ora-research-draft:${owner || "local"}:${id}`;
   const [models, setModels] = useState<ModelRow[]>([]);
   const [modelsKnown, setModelsKnown] = useState(false);
+  const modelRevision = useModelRevision();
   useEffect(() => {
     readModels().then(
       (s) => {
@@ -131,7 +133,7 @@ export function ResearchProject({
       },
       () => setModels([]),
     );
-  }, []);
+  }, [modelRevision]);
   const [detail, setDetail] = useState<ProjectDetail | null>(null);
   const [events, setEvents] = useState<ResearchEvent[]>([]);
   const [computes, setComputes] = useState<Compute[]>([]);
@@ -573,7 +575,7 @@ export function ResearchProject({
     <div className={styles.layout}>
       <div className={styles.page} data-testid="research-conversation">
         <header className={styles.head}>
-          <Folder size={17} aria-hidden />
+          <Sparkle size={17} aria-hidden />
           <div className={styles.headHeading}>
             <h1 className={styles.headTitle}>
               <span title={p.question}>{p.title || p.question}</span>

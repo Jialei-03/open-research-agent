@@ -103,7 +103,7 @@ for (const locale of ["zh", "en"] as const) {
     for (const send of [view.submit, view.enter]) {
       location.hash = "#new?workspace=folder&collection=project";
       send();
-      expect(location.hash.split("?")[0]).toBe("customize/models");
+      expect(location.hash.split("?")[0]).toBe("settings/models");
       expect(
         new URLSearchParams(location.hash.split("?")[1]).get("returnTo"),
       ).toBe("new?workspace=folder&collection=project");
@@ -127,7 +127,7 @@ it("the add button opens model setup even with an empty draft", () => {
       children: createElement(Capture),
     }),
   );
-  expect(location.hash).toBe("customize/models?returnTo=new");
+  expect(location.hash).toBe("settings/models?returnTo=new");
 });
 
 it("normal sending, busy, empty, Shift+Enter and IME behavior stay intact", () => {

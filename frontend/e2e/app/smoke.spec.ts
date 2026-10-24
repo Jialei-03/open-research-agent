@@ -12,7 +12,7 @@ import { zh } from "../../src/i18n/messages/zh";
 import { seedSmokeData, type SmokeData } from "../fixtures/smoke";
 import { advisorDM, experiments } from "../fixtures/team";
 
-const { t } = createTranslator("zh");
+const { t, tn } = createTranslator("zh");
 const quickOpenName = new RegExp(`^${zh["app.quickOpen"]}`);
 const sidebar = (page: Page) =>
   page.getByRole("navigation", {
@@ -183,6 +183,14 @@ async function ready(page: Page, data: SmokeData) {
       break;
     case "research":
       title = "冒烟研究";
+      break;
+    case "inbox":
+      title = zh["inbox.title"];
+      await expect(page.getByTestId("inbox")).toBeVisible();
+      break;
+    case "all-projects":
+      title = zh["projects.all"];
+      await expect(page.getByTestId("all-projects")).toBeVisible();
       break;
     case "workspaces":
       title = route.workspaceId ? "冒烟项目" : zh["workspace.workspaces"];
@@ -413,12 +421,12 @@ async function navigation(page: Page, data: SmokeData) {
   const nav = sidebar(page);
   await expect(nav).toBeVisible();
   await collapseSidebar(page, false);
-  const conversations = nav.getByRole("group", {
-    name: zh["team.messages"],
-    exact: true,
-  });
-  if (await conversations.count())
-    await expect(conversations.getByRole("link")).toHaveCount(2);
+  // The project's groups and direct messages, one conversation each in this data.
+  for (const name of [zh["sidebar.groups"], zh["sidebar.dms"]]) {
+    const conversations = nav.getByRole("group", { name, exact: true });
+    if (await conversations.count())
+      await expect(conversations.getByRole("link")).toHaveCount(1);
+  }
   const targets = [
     ...new Set(
       await nav
@@ -512,7 +520,13 @@ test("项目、新研究、研究记录和定时任务的入口", async ({ page,
   ])
     await screen(page, smoke, hash);
   await visit(page, smoke, "workspaces");
+  // The rail's "+" and the page's button open the same dialog.
+  await sidebar(page)
+    .getByRole("button", { name: zh["workspace.add"], exact: true })
+    .click();
+  await escapeDialog(page, zh["projects.new"]);
   await page
+    .getByRole("main")
     .getByRole("button", { name: zh["projects.new"], exact: true })
     .click();
   await escapeDialog(page, zh["projects.new"]);
@@ -522,11 +536,14 @@ test("项目、新研究、研究记录和定时任务的入口", async ({ page,
   await escapeDialog(page, zh["workspace.connections"]);
   await visit(page, smoke, "collections");
   await page
+    .getByRole("main")
     .getByRole("button", { name: zh["projects.new"], exact: true })
     .click();
   await escapeDialog(page, zh["projects.new"]);
   await visit(page, smoke, `research/${smoke.researchId}`);
+  // The page's own actions; the project's "⋯" menu in the sidebar shares the label.
   await page
+    .getByTestId("research-conversation")
     .getByRole("button", { name: zh["research.actions"], exact: true })
     .click();
   await page
@@ -543,9 +560,16 @@ test("项目、新研究、研究记录和定时任务的入口", async ({ page,
     "research",
     "scheduled",
     "tasks",
+    "customize/models",
+    "customize/machines",
+    "customize/tracking",
+    "settings/machines",
     `projects/${smoke.workspaceId}/board`,
-  ])
+  ]) {
     await visit(page, smoke, hash);
+    if (parseAppRoute(hash).screen === "settings")
+      await escapeDialog(page, zh["settings.title"]);
+  }
   await visit(page, smoke, `schedules/${smoke.scheduleId}`);
   await page
     .getByRole("button", { name: zh["reader.more.menu"], exact: true })
@@ -580,6 +604,29 @@ test("团队会话、私信、线程、动态、成员、工作流、比较和�
     ].map((tab) => `${team}/settings?thread=${encodeURIComponent(tab)}`),
   ])
     await screen(page, smoke, hash);
+  // The project's "⋯" menu: what belongs to the whole project, each opening its own page.
+  for (const [label, hash] of [
+    [zh["team.members"], `${team}/settings?thread=members`],
+    [zh["team.settings"], `${team}/settings?thread=workflow`],
+    [zh["team.activity"], `${team}/mentions`],
+    [zh["projects.all"], "all"],
+  ]) {
+    await visit(page, smoke, `${team}/${experiments}`);
+    await sidebar(page).locator('[data-id="project-menu"]').click();
+    await page.getByRole("menuitem", { name: label, exact: true }).click();
+    await expect(page).toHaveURL((url) => url.hash === `#${hash}`);
+    await ready(page, smoke);
+  }
+  // The sections' "+": a new research, a new colleague (the members page), a new group.
+  for (const [id, hash] of [
+    ["research-new", `new?workspace=${smoke.workspaceId}`],
+    ["add-member", `${team}/settings?thread=members`],
+  ]) {
+    await visit(page, smoke, `${team}/${experiments}`);
+    await sidebar(page).locator(`[data-id="${id}"]`).click();
+    await expect(page).toHaveURL((url) => url.hash === `#${hash}`);
+    await ready(page, smoke);
+  }
   await visit(page, smoke, `${team}/${experiments}`);
   await sidebar(page)
     .getByRole("button", { name: zh["team.addChannel"], exact: true })
@@ -601,24 +648,50 @@ test("团队会话、私信、线程、动态、成员、工作流、比较和�
     .getByRole("button", { name: zh["team.search"], exact: true })
     .click();
   await escapeDialog(page, quickOpenName);
+  // The right panel: the header's files button opens it on the files tab.
+  const panel = page.getByRole("complementary", {
+    name: zh["team.sidePanel"],
+    exact: true,
+  });
+  const panelTab = (name: string) =>
+    panel.getByRole("radio", { name, exact: true });
   await conversation
     .getByRole("button", { name: zh["team.files"], exact: true })
     .click();
+  await expect(panelTab(zh["panel.files"])).toBeChecked();
   await expect(
-    conversation.getByRole("button", {
-      name: zh["team.hidePanel"],
-      exact: true,
-    }),
+    panel.getByRole("region", { name: zh["panel.projectFiles"], exact: true }),
   ).toBeVisible();
-  await conversation
+  for (const name of [zh["panel.duty"], zh["panel.changes"]]) {
+    await panelTab(name).click();
+    await expect(panelTab(name)).toBeChecked();
+  }
+  await panel
+    .getByRole("button", { name: zh["panel.expand"], exact: true })
+    .click();
+  await panel
+    .getByRole("button", { name: zh["panel.collapse"], exact: true })
+    .click();
+  await panel
     .getByRole("button", { name: zh["team.hidePanel"], exact: true })
     .click();
+  await expect(panel).toHaveCount(0);
   await conversation
     .getByRole("button", { name: zh["team.showPanel"], exact: true })
     .click();
+  await expect(panel).toBeVisible();
   await visit(page, smoke, `${team}/settings?thread=members`);
+  // The sidebar's "+" leads here; the page's own button opens the hiring dialog,
+  // and a blank start opens the member form.
+  const hire = page
+    .getByRole("region", { name: zh["team.settings"], exact: true })
+    .getByRole("button", { name: zh["members.hire"], exact: true });
+  await hire.click();
+  await escapeDialog(page, zh["members.hire"]);
+  await hire.click();
   await page
-    .getByRole("button", { name: zh["members.add"], exact: true })
+    .getByRole("dialog", { name: zh["members.hire"], exact: true })
+    .getByRole("button", { name: zh["members.blank"], exact: true })
     .click();
   await escapeDialog(page, zh["members.add"]);
   await page
@@ -767,14 +840,7 @@ test("文库分组、发现、阅读器及其菜单和对话框", async ({ page,
 });
 
 test("自定义各页和设置各分类", async ({ page, smoke }) => {
-  for (const section of [
-    "playbook",
-    "roles",
-    "machines",
-    "tracking",
-    "models",
-    "workflows",
-  ])
+  for (const section of ["playbook", "roles", "workflows"])
     await screen(page, smoke, `customize/${section}`);
   await visit(page, smoke, "customize/playbook");
   await page
@@ -795,12 +861,18 @@ test("自定义各页和设置各分类", async ({ page, smoke }) => {
       .getByText("冒烟角色", { exact: true }),
   ).toBeVisible();
   await escapeDialog(page, zh["customize.role.advisor"]);
-  await visit(page, smoke, "customize/machines");
-  await page
+  // Models, research environments and tracking are connections: they open in the settings window.
+  const settingsWindow = page.getByRole("dialog", {
+    name: zh["settings.title"],
+    exact: true,
+  });
+  await visit(page, smoke, "settings/environments");
+  await settingsWindow
     .getByRole("button", { name: zh["settings.research.add"], exact: true })
     .click();
   await escapeDialog(page, zh["settings.research.add"]);
-  await visit(page, smoke, "customize/tracking");
+  await escapeDialog(page, zh["settings.title"]);
+  await visit(page, smoke, "settings/tracking");
   await page
     .getByRole("button", {
       name: t("customize.more", { name: "SwanLab" }),
@@ -811,7 +883,8 @@ test("自定义各页和设置各分类", async ({ page, smoke }) => {
     .getByRole("menuitem", { name: zh["settings.research.edit"], exact: true })
     .click();
   await escapeDialog(page, "SwanLab");
-  await visit(page, smoke, "customize/models");
+  await escapeDialog(page, zh["settings.title"]);
+  await visit(page, smoke, "settings/models");
   await page
     .getByRole("button", { name: zh["settings.models.dialog"], exact: true })
     .click();
@@ -836,6 +909,7 @@ test("自定义各页和设置各分类", async ({ page, smoke }) => {
     .getByRole("menuitem", { name: zh["library.import"], exact: true })
     .click();
   await escapeDialog(page, zh["settings.import.title"]);
+  await escapeDialog(page, zh["settings.title"]);
   await visit(page, smoke, "customize/workflows");
   await page.getByRole("button", { name: "冒烟工作流", exact: true }).click();
   await expect(
@@ -948,7 +1022,7 @@ test("首页与深色主题下的首页、团队会话和文库", async ({ page,
   await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
 });
 
-test("侧栏入口登记表、按需事项、分页和固定 rail", async ({ page, smoke }) => {
+test("侧栏入口登记表、待你决定、分页和固定 rail", async ({ page, smoke }) => {
   const fixture = await seedSidebarState(page, smoke);
   const seen = new Map<SidebarPlace, Set<string>>();
   // Parse the registry by place; a nested section cannot satisfy its parent's ids.
@@ -980,17 +1054,22 @@ test("侧栏入口登记表、按需事项、分页和固定 rail", async ({ pag
       .evaluateAll((nodes) =>
         nodes.map((node) => node.getAttribute("data-id")).sort(),
       );
+  // One tile per open project: the rail's ids repeat, so compare them as a set.
   const fixedRail = [...PLACES.rail].sort();
+  const distinctRail = async () => [...new Set(await railIds())];
   const assertRail = async () => {
-    await expect.poll(railIds).toEqual(fixedRail);
+    await expect.poll(distinctRail).toEqual(fixedRail);
     await collapseSidebar(page, true);
-    await expect.poll(railIds).toEqual(fixedRail);
+    await expect.poll(distinctRail).toEqual(fixedRail);
     await collapseSidebar(page, false);
-    await expect.poll(railIds).toEqual(fixedRail);
+    await expect.poll(distinctRail).toEqual(fixedRail);
   };
   await visit(page, smoke, `team/${smoke.workspaceId}/${experiments}`);
   const nav = sidebar(page);
-  await expect(nav.locator('[data-id="conversation"]')).toHaveCount(11);
+  const conversations = nav.locator('[data-id="conversation"]');
+  const dms = nav.locator('[data-id="dm"]');
+  const researches = nav.locator('[data-id="research-row"]');
+  await expect(conversations).toHaveCount(11);
   for (const index of [32, 33, 34])
     await expect(
       nav.getByRole("link", {
@@ -998,55 +1077,94 @@ test("侧栏入口登记表、按需事项、分页和固定 rail", async ({ pag
         exact: true,
       }),
     ).toBeVisible();
+  // Direct messages page like the groups: eight, and the unread and working ones beyond them.
+  await expect(dms).toHaveCount(10);
+  for (const index of [10, 11])
+    await expect(
+      nav.getByRole("link", { name: `侧栏成员 ${index}`, exact: true }),
+    ).toBeVisible();
   await expect(
     nav.getByRole("group", { name: "常用成员", exact: true }),
   ).toHaveCount(0);
   await expect(
     nav.getByRole("button", { name: "通知", exact: true }),
   ).toHaveCount(0);
-  const attention = nav.getByRole("region", {
-    name: zh["sidebar.needsYou"],
-    exact: true,
-  });
-  await expect(attention.getByRole("link")).toHaveCount(2);
-  await expect(attention).toContainText(zh["sidebar.waiting"]);
+  // "Needs you" is not a section of the sidebar: its items are counted on
+  // "Waiting on you" and the project's tile, and listed on that page.
+  await expect(
+    nav.getByRole("region", { name: zh["sidebar.needsYou"], exact: true }),
+  ).toHaveCount(0);
+  const waitingCount = (count: number) => tn("inbox.badge", count);
+  const inbox = nav.locator('[data-id="inbox"]');
+  const entries = nav.locator('[data-sidebar-place="research"]');
+  const tile = nav.locator('[data-sidebar-place="rail"] [data-id="project"]');
+  await expect(
+    entries.getByLabel(waitingCount(2), { exact: true }),
+  ).toHaveCount(1);
+  await expect(
+    tile.first().getByLabel(waitingCount(2), { exact: true }),
+  ).toBeVisible();
+  await expect(tile).toHaveCount(2);
+  await expect(tile.nth(1).getByLabel(/件等你决定/)).toHaveCount(0);
   for (const place of [
     "rail",
     "research",
-    "attention",
     "researches",
-    "messages",
-    "team",
+    "groups",
+    "dms",
   ] as const)
     await collect(place);
-  // The research section pages like the messages: eight, then more, then less.
+  // The research section pages like the groups: eight, then more, then less.
+  await expect(researches).toHaveCount(8);
   await nav.locator('[data-id="researches-more"]').click();
+  await expect(researches).toHaveCount(13);
   await collect("researches");
   await nav.locator('[data-id="researches-less"]').click();
+  await expect(researches).toHaveCount(8);
   await collect("researches");
   await assertRail();
-  await nav.locator('[data-id="messages-more"]').click();
-  await expect(nav.locator('[data-id="conversation"]')).toHaveCount(31);
-  await collect("messages");
+  await nav.locator('[data-id="groups-more"]').click();
+  await expect(conversations).toHaveCount(31);
+  await collect("groups");
+  await nav.locator('[data-id="dms-more"]').click();
+  await expect(dms).toHaveCount(12);
+  await expect(nav.locator('[data-id="dms-more"]')).toHaveCount(0);
+  await collect("dms");
   await page.reload();
-  await expect(nav.locator('[data-id="conversation"]')).toHaveCount(31);
-  await nav.locator('[data-id="messages-more"]').click();
-  await expect(nav.locator('[data-id="conversation"]')).toHaveCount(35);
-  await expect(nav.locator('[data-id="messages-more"]')).toHaveCount(0);
+  await expect(conversations).toHaveCount(31);
+  await expect(dms).toHaveCount(12);
+  await nav.locator('[data-id="groups-more"]').click();
+  await expect(conversations).toHaveCount(35);
+  await expect(nav.locator('[data-id="groups-more"]')).toHaveCount(0);
   // A second project starts at eight; returning restores the first project's limit.
   await page.goto(`/#new?workspace=${fixture.otherWorkspace}`);
-  await expect(nav.locator('[data-id="conversation"]')).toHaveCount(10);
+  await expect(conversations).toHaveCount(10);
+  await expect(dms).toHaveCount(10);
   await page.goto(`/#team/${smoke.workspaceId}/${experiments}`);
-  await expect(nav.locator('[data-id="conversation"]')).toHaveCount(35);
-  await nav.locator('[data-id="messages-less"]').click();
-  await expect(nav.locator('[data-id="conversation"]')).toHaveCount(11);
-  await attention.getByRole("link", { name: /冒烟决定/ }).click();
+  await expect(conversations).toHaveCount(35);
+  await expect(dms).toHaveCount(12);
+  await nav.locator('[data-id="groups-less"]').click();
+  await expect(conversations).toHaveCount(11);
+  await nav.locator('[data-id="dms-less"]').click();
+  await expect(dms).toHaveCount(10);
+  // Waiting on you: the page lists what waits, and each item opens where it was asked.
+  await inbox.click();
+  await expect(page).toHaveURL(
+    (url) => url.hash === `#inbox?workspace=${smoke.workspaceId}`,
+  );
+  await ready(page, smoke);
+  await expect(inbox).toHaveAttribute("aria-current", "page");
+  const waiting = page.getByTestId("inbox");
+  await expect(waiting.getByRole("link")).toHaveCount(2);
+  await assertRail();
+  await waiting.getByRole("link", { name: /冒烟决定/ }).click();
   await expect(page).toHaveURL(
     (url) =>
       new URLSearchParams(url.hash.split("?")[1]).get("thread") ===
       smoke.threadId,
   );
-  await attention
+  await inbox.click();
+  await waiting
     .getByRole("link", { name: /冒烟研究|核对离线研究页面/ })
     .click();
   await expect(page).toHaveURL(
@@ -1054,21 +1172,82 @@ test("侧栏入口登记表、按需事项、分页和固定 rail", async ({ pag
       new URLSearchParams(url.hash.split("?")[1]).get("thread") ===
       `research:${smoke.researchId}`,
   );
+  // The board is a fixed entry too; the rail stays as it is on every page.
+  await nav.locator('[data-id="board"]').click();
+  await expect(page).toHaveURL(
+    (url) => url.hash === `#team/${smoke.workspaceId}/work`,
+  );
+  await ready(page, smoke);
+  await expect(nav.locator('[data-id="board"]')).toHaveAttribute(
+    "aria-current",
+    "page",
+  );
+  await assertRail();
+  // All projects: each project's latest conversations under its name.
+  await nav.locator('[data-id="all-projects"]').click();
+  await expect(page).toHaveURL((url) => url.hash === "#all");
+  await ready(page, smoke);
+  await expect(nav.locator('[data-id="all-projects"]')).toHaveAttribute(
+    "aria-current",
+    "page",
+  );
+  await expect(nav.locator('[data-id="all-project"]')).toHaveCount(2);
+  await expect(nav.locator('[data-id="all-row"]')).toHaveCount(8);
+  await collect("all");
+  await collect("research");
+  await assertRail();
+  await nav.locator('[data-id="all-project"]').first().click();
+  await expect(page).toHaveURL(
+    (url) => url.hash === `#team/${smoke.workspaceId}`,
+  );
   fixture.navigation.workspaces[0].researches[0].status = "finished";
   fixture.navigation.workspaces[0].researches[0].unread = true;
   fixture.team.notifications[0].data = {}; // a normal mention is not a decision
   await page.reload();
-  await expect(attention).toHaveCount(0);
-  for (const id of ["new-research", "activity", "work", "members"])
+  await expect(
+    entries.getByLabel(waitingCount(2), { exact: true }),
+  ).toHaveCount(0);
+  await expect(tile.first().getByLabel(/件等你决定/)).toHaveCount(0);
+  await inbox.click();
+  await expect(
+    page.getByTestId("inbox").getByText(zh["inbox.empty"], { exact: true }),
+  ).toBeVisible();
+  for (const id of [
+    "workspace",
+    "project-menu",
+    "search",
+    "inbox",
+    "board",
+    "research-new",
+  ])
     await expect(nav.locator(`[data-id="${id}"]`)).toHaveCount(1);
+  // What the sidebar no longer lists: new research, threads, activity, work, members, settings.
+  for (const id of [
+    "new-research",
+    "threads",
+    "activity",
+    "work",
+    "members",
+    "team-settings",
+  ])
+    await expect(nav.locator(`[data-id="${id}"]`)).toHaveCount(0);
   await assertRail();
-  // Before any project: the way to make one, and none of the team's entries.
+  // Before any project: the way to make one, and none of the project's entries.
   const workspaces = fixture.navigation.workspaces;
   fixture.navigation.workspaces = [];
   await page.goto("/#new");
   await page.reload();
   await expect(nav.locator('[data-id="create-project"]')).toBeVisible();
-  for (const id of ["activity", "work", "members", "team-settings"])
+  for (const id of [
+    "project-menu",
+    "inbox",
+    "board",
+    "research-new",
+    "groups",
+    "dms",
+    "create-channel",
+    "add-member",
+  ])
     await expect(nav.locator(`[data-id="${id}"]`)).toHaveCount(0);
   await collect("empty");
   fixture.navigation.workspaces = workspaces;

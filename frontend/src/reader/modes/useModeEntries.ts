@@ -84,7 +84,7 @@ export function useModeEntries({
               label: t("reader.translation.addModel"),
               icon: Plus,
               onSelect: () => {
-                window.location.hash = "customize/models";
+                window.location.hash = "settings/models";
               },
             } satisfies MenuEntry,
           ]

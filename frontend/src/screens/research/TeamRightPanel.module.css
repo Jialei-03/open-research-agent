@@ -328,6 +328,28 @@
   border-top: 1px solid var(--ui-edge-subtle);
 }
 
+.chime {
+  display: flex;
+  align-items: center;
+  gap: var(--ui-space-4);
+  padding: var(--ui-space-4) var(--ui-space-4) var(--ui-space-4)
+    var(--ui-space-12);
+  border-radius: var(--ui-r-10);
+  background: var(--ui-bg);
+  box-shadow: var(--ui-elev-1);
+}
+
+.chime input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  color: var(--ui-fg);
+  font: inherit;
+  font-size: var(--ui-text-14);
+  outline: none;
+}
+
 .taskRow {
   display: flex;
   align-items: center;
@@ -368,4 +390,19 @@
   flex: none;
   color: var(--ui-fg-3);
   font-size: var(--ui-text-12);
+}
+
+/* On a narrow window the panel covers the conversation instead of squeezing it. */
+@media (max-width: 899px) {
+  .panel {
+    position: absolute;
+    inset: 0 0 0 auto;
+    z-index: 1;
+    width: min(100%, 360px);
+    box-shadow: var(--ui-elev-2);
+  }
+
+  .panel[data-expanded] {
+    width: 100%;
+  }
 }

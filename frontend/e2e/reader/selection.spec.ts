@@ -635,7 +635,7 @@ test("without a model, the translation says where to add one", async ({
   await expect(popover(page)).toContainText("未配置模型");
   await expect(
     popover(page).getByRole("link", { name: "添加模型" }),
-  ).toHaveAttribute("href", "#customize/models");
+  ).toHaveAttribute("href", "#settings/models");
   await expect(popover(page).getByRole("alert")).toHaveCount(0);
   expect(created).toEqual([]);
 });

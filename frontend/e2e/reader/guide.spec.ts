@@ -132,11 +132,11 @@ test("without a model the guide says to add one in settings", async ({
 
   await expect(panel(page).getByText("未配置模型")).toBeVisible();
   const link = panel(page).getByRole("link", { name: "添加模型" });
-  await expect(link).toHaveAttribute("href", "#customize/models");
+  await expect(link).toHaveAttribute("href", "#settings/models");
   await expect(panel(page).getByRole("button")).toHaveCount(0);
 
   await link.click();
-  await expect(page).toHaveURL(/#customize\/models$/);
+  await expect(page).toHaveURL(/#settings\/models$/);
 });
 
 test("a guide being written shows what has arrived, and follows it", async ({

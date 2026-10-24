@@ -4,6 +4,7 @@ import { AppActions } from "../../app/AppSidebar";
 import { useI18n } from "../../i18n/I18nProvider";
 import { Button, IconButton, toast } from "../../ui";
 import { readModels, type ModelRow } from "../setup/model-api";
+import { useModelRevision } from "../setup/useModelRevision";
 import { refreshResearchNavigation } from "./navigation-api";
 import { useResearchNavigation } from "./ResearchNavigation";
 import { getTeam, teamHash } from "./team-api";
@@ -187,6 +188,7 @@ function FirstMessage({
   const picker = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const modelRevision = useModelRevision();
   useEffect(() => {
     let cancelled = false;
     readModels().then(
@@ -210,7 +212,7 @@ function FirstMessage({
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [modelRevision]);
   useEffect(() => {
     try {
       if (text) localStorage.setItem(draftKey, text);

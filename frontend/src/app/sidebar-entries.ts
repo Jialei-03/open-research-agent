@@ -29,7 +29,6 @@ export const PLACES = {
     "researches-less",
   ],
   empty: ["create-project"],
-  attention: ["attention", "attention-item"],
   groups: [
     "groups",
     "create-channel",
@@ -41,14 +40,7 @@ export const PLACES = {
   dms: ["dms", "add-member", "dm", "dms-more", "dms-less"],
   materials: ["import", "all", "reading", "unread", "read", "discover"],
   recent: ["recent", "recent-paper", "recent-more", "recent-less"],
-  customize: [
-    "playbook",
-    "roles",
-    "workflows",
-    "machines",
-    "tracking",
-    "models",
-  ],
+  customize: ["playbook", "roles", "workflows"],
   tasks: ["new-task", "task"],
 } as const;
 

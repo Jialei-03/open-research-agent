@@ -45,15 +45,17 @@
   min-width: 0;
   height: var(--ui-control-md);
   box-sizing: border-box;
-  padding: 0 var(--ui-space-12);
-  border: 1px solid var(--ui-edge-subtle);
-  border-radius: var(--ui-r-pill);
-  background: var(--ui-bg-2);
+  padding: 0 var(--ui-space-10);
+  border: 0;
+  /* One search field everywhere: the settings one — radius 10, the card's surface, a hairline lift. */
+  border-radius: var(--ui-r-10);
+  background: var(--ui-bg);
+  box-shadow: var(--ui-elev-1);
   color: var(--ui-fg-2);
 }
 
 .search:focus-within {
-  box-shadow: var(--ui-focus-ring);
+  box-shadow: 0 0 0 1.5px var(--ui-edge-strong);
 }
 
 .search > svg {

@@ -53,7 +53,7 @@ export function ComposerPickers({ assistant }: { assistant: Assistant }) {
       id: "settings",
       label: t("reader.assistant.model.settings"),
       onSelect: () => {
-        window.location.hash = "#customize/models";
+        window.location.hash = "#settings/models";
       },
     },
   ];

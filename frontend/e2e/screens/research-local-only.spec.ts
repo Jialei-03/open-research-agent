@@ -29,8 +29,18 @@ test("the hosted site sends research to the local edition", async ({
   await expect(notice.getByRole("button")).toBeVisible();
   await expect(page.getByTestId("home-research")).toHaveCount(0);
 
-  // Machines moved to Customize, which the hosted site does not offer.
-  await page.goto("/#settings/environments");
-  await expect(page).toHaveURL(/#customize\/machines$/);
-  await expect(page.getByTestId("research-local-only")).toBeVisible();
+  // Research environments and tracking are the local edition's: the hosted
+  // settings neither offer them nor open them.
+  for (const hash of ["settings/environments", "customize/machines"]) {
+    await page.goto(`/#${hash}`);
+    const settings = page.getByRole("dialog", { name: "设置", exact: true });
+    await expect(settings).toBeVisible();
+    await expect(
+      settings.getByRole("heading", { level: 1, name: "常规" }),
+    ).toBeVisible();
+    for (const name of ["研究环境", "实验追踪"])
+      await expect(
+        settings.getByRole("navigation").getByRole("button", { name }),
+      ).toHaveCount(0);
+  }
 });

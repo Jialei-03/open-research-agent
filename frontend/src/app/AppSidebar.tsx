@@ -200,9 +200,9 @@ export function AppSidebar({
             data-id={sidebarId("hosted-models")}
             icon={SlidersHorizontal}
             label={t("customize.models")}
-            href="#customize/models"
-            active={screen === "customize"}
-            onClick={followLink(go, "customize/models")}
+            href="#settings/models"
+            active={screen === "settings"}
+            onClick={followLink(go, "settings/models")}
           />
           <SidebarItem
             data-id={sidebarId("hosted-settings")}
@@ -453,7 +453,12 @@ function AppResearchSidebar({
           onClick={() => onCollapsedChange(!collapsed)}
         />
         <div className={styles.railDestinations}>
-          <ProjectRail hash={contextHash} section={section} go={choose} />
+          <ProjectRail
+            hash={contextHash}
+            section={section}
+            restore={remembered.current.research}
+            go={choose}
+          />
           {railLink(
             "materials",
             Library,

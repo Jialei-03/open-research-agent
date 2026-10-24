@@ -35,6 +35,11 @@ class MessageInput(Strict):
     also_channel: bool = False
 
 
+class HireInput(Strict):
+    description: str = Field(min_length=1, max_length=2000)
+    model_config_id: str = Field(default="", max_length=64)
+
+
 class ChannelInput(Strict):
     name: str = Field(min_length=1, max_length=100)
 
@@ -256,6 +261,19 @@ def install_team_routes(app, settings, db, auth, workspace_of):
             raise HTTPException(409, str(error)) from None
         d.commit()
         return result
+
+    @app.post(base + "/members/draft")
+    def draft_member(id: str, body: HireInput, a=Depends(auth), d=Depends(db)):
+        from . import team_hire
+
+        workspace = editable_workspace(d, id, a)
+        try:
+            return team_hire.draft(
+                settings, app.state.maker, workspace, body.description,
+                body.model_config_id,
+            )
+        except ValueError as error:
+            raise HTTPException(422, str(error)) from None
 
     @app.post(base + "/members")
     def add_member(id: str, body: members.MemberCreate, a=Depends(auth), d=Depends(db)):

@@ -61,8 +61,11 @@ test.afterEach(async ({ page }) => {
 
 test("models are added, chosen, tested and removed", async ({ page }) => {
   await page.goto(SETTINGS("models"));
-  await expect(page).toHaveURL(/#customize\/models$/);
-  const section = page.getByRole("region", { name: "模型" });
+  await expect(page).toHaveURL(/#settings\/models$/);
+  // The list sits in the settings window beside the settings navigation.
+  const section = page
+    .getByRole("dialog", { name: "设置", exact: true })
+    .getByRole("main");
   await expect(section.getByText("暂无条目")).toBeVisible();
 
   await addModel(page, "gpt-test-first");

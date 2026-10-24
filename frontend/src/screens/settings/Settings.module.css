@@ -293,6 +293,7 @@
   flex-direction: column;
 }
 
+/* A figure reads as the app's metrics do: a small label over a large number. */
 .figure dt {
   color: var(--ui-fg-2);
   font-size: var(--ui-text-12);
@@ -300,6 +301,9 @@
 
 .figure dd {
   margin: 0;
+  color: var(--ui-fg);
+  font-size: var(--ui-text-20);
+  font-weight: var(--ui-weight-strong);
   font-variant-numeric: tabular-nums;
 }
 
@@ -424,6 +428,16 @@
 .skeleton {
   composes: skeleton from "../Management.module.css";
 }
+/* Nothing in a section yet: one line in the section's card, not a page-sized empty state. */
 .empty {
-  composes: empty from "../Management.module.css";
+  display: flex;
+  align-items: center;
+  gap: var(--ui-space-8);
+  min-height: 56px;
+  padding: var(--ui-space-12) var(--ui-space-16);
+  border-radius: var(--ui-r-16);
+  background: var(--ui-bg);
+  box-shadow: var(--ui-elev-1);
+  color: var(--ui-fg-3);
+  font-size: var(--ui-text-13);
 }

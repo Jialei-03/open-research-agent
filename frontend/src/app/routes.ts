@@ -39,13 +39,7 @@ export type AppRoute =
     }
   | {
       screen: "customize";
-      section:
-        | "playbook"
-        | "roles"
-        | "machines"
-        | "tracking"
-        | "models"
-        | "workflows";
+      section: "playbook" | "roles" | "workflows";
       redirect?: string;
     }
   | {
@@ -91,16 +85,18 @@ export function parseAppRoute(hash: string): AppRoute {
   if (path === "settings") return { screen: "settings" };
   if (path.startsWith("settings/")) {
     const category = path.slice("settings/".length);
-    const moved = {
-      models: "models",
-      environments: "machines",
-      tracking: "tracking",
-      playbook: "playbook",
-    } as const;
-    if (Object.hasOwn(moved, category)) {
-      const section = moved[category as keyof typeof moved];
-      return { screen: "customize", section, redirect: `customize/${section}` };
-    }
+    if (category === "playbook")
+      return {
+        screen: "customize",
+        section: "playbook",
+        redirect: "customize/playbook",
+      };
+    if (category === "machines")
+      return {
+        screen: "settings",
+        category: "environments",
+        redirect: "settings/environments",
+      };
     return /^[a-z]{1,20}$/.test(category)
       ? { screen: "settings", category }
       : { screen: "settings", redirect: "settings" };
@@ -131,12 +127,19 @@ export function parseAppRoute(hash: string): AppRoute {
   }
   if (path === "customize" || path.startsWith("customize/")) {
     const section = path.slice("customize/".length);
-    return section === "models" ||
-      section === "playbook" ||
+    // Models, machines and tracking are the app's connections, in settings.
+    const moved = {
+      models: "models",
+      machines: "environments",
+      tracking: "tracking",
+    } as const;
+    if (Object.hasOwn(moved, section)) {
+      const category = moved[section as keyof typeof moved];
+      return { screen: "settings", category, redirect: `settings/${category}` };
+    }
+    return section === "playbook" ||
       section === "roles" ||
-      section === "workflows" ||
-      section === "machines" ||
-      section === "tracking"
+      section === "workflows"
       ? { screen: "customize", section }
       : {
           screen: "customize",

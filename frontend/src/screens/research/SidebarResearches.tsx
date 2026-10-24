@@ -61,7 +61,20 @@ export function SidebarResearches({
     limit,
     (r) => r.id === currentId || !!r.working || waiting(r),
   );
-  const newHash = `new?workspace=${workspaceId}`;
+  // A new research starts where the open one is: its project and its classification.
+  const collectionId =
+    data.workspaces
+      .find((w) => w.id === workspaceId)
+      ?.researches.find((r) => r.id === currentId)?.collection_id ||
+    (route.screen === "research-collections" || route.screen === "new-research"
+      ? route.collectionId
+      : undefined);
+  const newHash = `new?${new URLSearchParams({
+    workspace: workspaceId,
+    ...(collectionId && collectionId !== "unclassified"
+      ? { collection: collectionId }
+      : {}),
+  })}`;
   return (
     <section
       data-sidebar-place="researches"

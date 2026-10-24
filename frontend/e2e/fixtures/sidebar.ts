@@ -50,7 +50,7 @@ export async function seedSidebarState(page: Page, smoke: SmokeData) {
     name: "另一项目",
     researches: [],
   });
-  team.channels = Array.from({ length: 35 }, (_, index) => ({
+  const groups = Array.from({ length: 35 }, (_, index) => ({
     id:
       index === 0
         ? advisorDM
@@ -65,6 +65,27 @@ export async function seedSidebarState(page: Page, smoke: SmokeData) {
     last_message: null,
     working_member_ids: index === 33 ? [smoke.memberId] : [],
   }));
+  // Enough colleagues for the direct messages to page: the 11th has unread
+  // messages and the 12th is working, so both stay listed past the first eight.
+  const colleagues = Array.from({ length: 12 }, (_, index) => ({
+    id: `dm-member-${index}`,
+    name: `侧栏成员 ${index}`,
+    role: "custom",
+    status: "idle" as const,
+    active_run_id: null,
+  }));
+  team.members.push(...colleagues);
+  const dms = colleagues.map((member, index) => ({
+    id: `ffffffff-ffff-4fff-8fff-${String(index + 10).padStart(12, "0")}`,
+    key: `dm:${member.id}`,
+    name: member.name,
+    member_id: member.id,
+    unread: index === 10 ? 4 : 0,
+    last_at: new Date(Date.UTC(2026, 9, 24, 7, 35 - index)).toISOString(),
+    last_message: null,
+    working_member_ids: index === 11 ? [member.id] : [],
+  }));
+  team.channels = [...groups, ...dms];
   team.notifications = [
     {
       id: smoke.threadId,

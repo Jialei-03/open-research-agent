@@ -216,50 +216,6 @@
   box-shadow: var(--ui-focus-ring);
 }
 
-.attention {
-  display: flex;
-  flex: none;
-  flex-direction: column;
-  max-height: 32vh;
-  min-height: 0;
-}
-
-.attentionList {
-  min-height: 0;
-  overflow: auto;
-  scrollbar-width: thin;
-}
-
-.attentionRow {
-  display: flex;
-  align-items: center;
-  gap: var(--ui-space-8);
-  min-height: var(--ui-control-md);
-  padding: 0 var(--ui-space-10);
-  border-radius: var(--ui-r-8);
-  color: var(--ui-fg-1);
-  font-size: var(--ui-text-13);
-  text-decoration: none;
-}
-
-.attentionRow:hover {
-  background: var(--ui-hover);
-}
-
-.attentionRow > span {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.attentionRow small {
-  flex: none;
-  color: var(--ui-warning-text);
-  font-size: var(--ui-text-12);
-}
-
 /* The project's researches: claude-web's conversation rows — one line, 32px, a state at the end. */
 .researchList {
   display: grid;
@@ -348,6 +304,30 @@
   letter-spacing: -0.01em;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.menuAnchor {
+  position: relative;
+  display: inline-flex;
+  flex: none;
+}
+
+.menuCount {
+  position: absolute;
+  top: var(--ui-space-2);
+  right: var(--ui-space-2);
+  min-width: var(--ui-space-16);
+  height: var(--ui-space-16);
+  box-sizing: border-box;
+  padding: 0 var(--ui-space-4);
+  border-radius: var(--ui-r-pill);
+  background: var(--ui-danger);
+  color: var(--ui-paper);
+  font-size: var(--ui-text-11);
+  line-height: var(--ui-space-16);
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
 }
 
 .waitingCount {

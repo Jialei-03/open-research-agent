@@ -124,10 +124,10 @@
   transform: scale(0.94);
 }
 
+/* Selected is one look across the app: the light grey fill the settings sidebar uses. */
 .railItem[aria-current] {
-  background: var(--ui-bg);
+  background: var(--ui-selected);
   color: var(--ui-fg);
-  box-shadow: var(--ui-elev-1);
 }
 
 .railItem[aria-current] svg {
@@ -321,8 +321,8 @@
   scrollbar-width: none;
 }
 
+/* A project is a rail item like the others: its initial, hover a faint grey, selected the grey fill. */
 .projectTile {
-  --tile: var(--ui-fg-2);
   position: relative;
   display: grid;
   flex: none;
@@ -332,33 +332,26 @@
   padding: 0;
   border: 0;
   border-radius: var(--ui-r-10);
-  background: color-mix(in oklab, var(--tile) 16%, var(--ui-bg));
-  color: color-mix(in oklab, var(--tile) 70%, var(--ui-fg));
+  background: transparent;
+  color: var(--ui-fg-2);
   font: inherit;
   font-size: var(--ui-text-14);
   font-weight: var(--ui-weight-strong);
   text-decoration: none;
   cursor: pointer;
-  transition: box-shadow var(--ui-dur-1) var(--ui-ease-out);
-}
-
-.projectTile[data-all],
-.projectTile[data-add] {
-  background: transparent;
-  color: var(--ui-fg-2);
-}
-
-.projectTile[data-all] {
-  background: var(--ui-bg);
-  box-shadow: var(--ui-elev-1);
+  transition:
+    background-color var(--ui-dur-1) var(--ui-ease-out),
+    color var(--ui-dur-1) var(--ui-ease-out);
 }
 
 .projectTile:hover {
-  box-shadow: 0 0 0 2px var(--ui-edge-strong);
+  background: var(--ui-hover);
+  color: var(--ui-fg);
 }
 
 .projectTile[aria-current="page"] {
-  box-shadow: 0 0 0 2px var(--ui-fg);
+  background: var(--ui-selected);
+  color: var(--ui-fg);
 }
 
 .projectTile:focus-visible {

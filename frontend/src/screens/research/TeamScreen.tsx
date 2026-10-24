@@ -13,6 +13,7 @@ import {
   Bookmark,
   ChevronRight,
   ClipboardList,
+  Columns3,
   ChevronDown,
   Copy,
   Eye,
@@ -52,6 +53,7 @@ import { useI18n } from "../../i18n/I18nProvider";
 import type { MessageKey, PluralBase } from "../../i18n/i18n";
 import { Button, Dialog, IconButton, Menu, TextField, toast } from "../../ui";
 import { readModels, type ModelRow } from "../setup/model-api";
+import { useModelRevision } from "../setup/useModelRevision";
 import { AddModelButton, openModelSetup } from "../setup/ModelSetup";
 import { ModelPicker } from "./talk/Pickers";
 import { Prose } from "./talk/ThreadView";
@@ -59,6 +61,7 @@ import { RunTurn, SummaryLine, Trail } from "./process/Process";
 import { shortDuration } from "./process/model";
 import { summary } from "./process/model";
 import { ResearchProject } from "./ResearchProject";
+import { GroupAvatar } from "./GroupAvatar";
 import { TeamRightPanel, WATCH_EVENT, type PanelTab } from "./TeamRightPanel";
 import { TeamInbox } from "./TeamActivity";
 import { TeamWorkScreen } from "./TeamWork";
@@ -131,6 +134,7 @@ export function TeamScreen({
   const { quickOpen } = useContext(AppActions);
   const workspace = data.workspaces.find((w) => w.id === id);
   const { team, error } = useTeam(id);
+  const modelRevision = useModelRevision();
   const [models, setModels] = useState<ModelRow[]>([]);
   const [modelsKnown, setModelsKnown] = useState(false);
   const [model, setModel] = useState("");
@@ -212,7 +216,7 @@ export function TeamScreen({
     return () => {
       stale = true;
     };
-  }, [id, workspace?.model_config_id]);
+  }, [id, workspace?.model_config_id, modelRevision]);
   const memberModel = team?.members.find(
     (m) => m.id === channel?.member_id,
   )?.model_config_id;
@@ -314,13 +318,13 @@ export function TeamScreen({
         >
           <header className={styles.header}>
             {channelId === "work" ? (
-              <ClipboardList size={16} aria-hidden />
+              <Columns3 size={16} aria-hidden />
             ) : channelId === "mentions" ? (
               <Bell size={16} aria-hidden />
             ) : channel?.member_id || channelId === "threads" ? (
               <MessageSquare size={16} aria-hidden />
             ) : (
-              <Hash size={16} aria-hidden />
+              <GroupAvatar members={team?.members || []} size="sm" />
             )}
             {team && directMember ? (
               <TeamMemberCard
@@ -361,7 +365,9 @@ export function TeamScreen({
                       size="sm"
                       icon={Pin}
                       onClick={() => {
+                        // The pins are listed on the files tab, above the project's tree.
                         setFile("");
+                        setPanelTab("files");
                         togglePanel(true);
                         if (threadId) go(teamHash(id, channel.id));
                       }}
@@ -944,7 +950,7 @@ function MessagePane({
               </>
             ) : (
               <>
-                <Hash size={32} aria-hidden />
+                <GroupAvatar members={team.members} />
                 <span>
                   {defaultChannelNames[channel.key] === channel.name
                     ? t(`team.channel.${channel.key}` as MessageKey)
@@ -1205,6 +1211,9 @@ export function MessageRow({
       ? team.members.find((m) => m.role === "human")
       : undefined);
   const human = member?.role === "human" || message.kind === "research";
+  // A direct message is one conversation: no threads.
+  const direct = !!team.channels.find((c) => c.id === message.channel_id)
+    ?.member_id;
   const waker = team.members.find((m) => m.id === message.data.woken_by);
   const wakeLabel = waker && waker.role !== "human" && (
     <span className={styles.messageStatus}>
@@ -1436,7 +1445,7 @@ export function MessageRow({
         <MessageReactions team={team} message={message} />
         <footer className={styles.metadata}>
           {wakeLabel}
-          {message.data.thread_origin && (
+          {message.data.thread_origin && !direct && (
             <button
               className={styles.replies}
               onClick={() => openThread(message)}
@@ -1528,12 +1537,14 @@ export function MessageRow({
               )
           }
         />
-        <IconButton
-          size="sm"
-          icon={MessageSquare}
-          label={t("team.reply")}
-          onClick={() => openThread(message)}
-        />
+        {!direct && (
+          <IconButton
+            size="sm"
+            icon={MessageSquare}
+            label={t("team.reply")}
+            onClick={() => openThread(message)}
+          />
+        )}
         {stop}
         <MessageMoreMenu
           message={message}

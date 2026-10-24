@@ -100,9 +100,9 @@ test("the tabs of the side panel switch its text", async ({ page }) => {
     name: "添加模型",
     exact: true,
   });
-  await expect(addModel).toHaveAttribute("href", "#customize/models");
+  await expect(addModel).toHaveAttribute("href", "#settings/models");
   await addModel.click();
-  await expect(page).toHaveURL(/#customize\/models$/);
+  await expect(page).toHaveURL(/#settings\/models$/);
   await expect(
     page.getByRole("heading", { name: "模型", exact: true }),
   ).toBeVisible();

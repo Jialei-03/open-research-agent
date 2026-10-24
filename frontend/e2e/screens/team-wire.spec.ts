@@ -223,7 +223,12 @@ test("team settings persist rules, switch workflows and open canvas messages", a
 }) => {
   const { writes } = await setup(page);
   await page.goto(`/#team/${wid}/${cid}`);
-  await page.getByRole("link", { name: "成员", exact: true }).click();
+  // The project's menu leads to its members and team settings.
+  await page
+    .getByRole("navigation", { name: "侧栏", exact: true })
+    .locator('[data-id="project-menu"]')
+    .click();
+  await page.getByRole("menuitem", { name: "成员", exact: true }).click();
   await expect(page.getByRole("heading", { name: "团队设置" })).toBeVisible();
   await expect(
     page
@@ -290,21 +295,19 @@ test("queued rule wakes stay inline and compact until work starts", async ({
     page.getByRole("region", { name: "线程", exact: true }),
   ).toHaveCount(0);
   await expect(row.getByRole("button", { name: /条回复/ })).toHaveCount(0);
-  const conversations = page
-    .getByRole("navigation", { name: "侧栏", exact: true })
-    .getByRole("group", { name: "消息", exact: true });
-  const conversation = conversations.getByRole("link", {
+  const sidebar = page.getByRole("navigation", { name: "侧栏", exact: true });
+  const groups = sidebar.getByRole("group", { name: "群聊", exact: true });
+  const conversation = groups.getByRole("link", {
     name: "实验",
     exact: true,
   });
   await expect(
     conversation.getByText("工作中…", { exact: true }),
   ).toBeVisible();
-  await expect(conversations.getByRole("link").first()).toHaveAccessibleName(
-    "实验",
-  );
+  await expect(groups.getByRole("link").first()).toHaveAccessibleName("实验");
   await expect(
-    conversations
+    sidebar
+      .getByRole("group", { name: "私聊", exact: true })
       .getByRole("link", { name: "advisor", exact: true })
       .getByText("工作中…", { exact: true }),
   ).toHaveCount(0);

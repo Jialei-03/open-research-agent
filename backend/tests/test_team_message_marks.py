@@ -196,8 +196,11 @@ def test_team_message_marks_virtual_roots_and_direct_messages(inbox):
         "research:native",
         f"legacy:{run.id}",
     }
-    history = client.get(base + f"/channels/{channel.id}/messages").json()
-    assert history["messages"][0]["pinned"] is True
+    history = client.get(
+        base + f"/channels/{channel.id}/messages",
+        params={"thread_id": "research:native"},
+    ).json()
+    assert history["root"]["pinned"] is True
 
 
 def test_team_message_marks_native_research_payload_includes_channel_pins(
@@ -297,9 +300,11 @@ def test_team_broadcast_send_idempotent_and_references_live_files(inbox, monkeyp
         url, json={**body, "client_id": "no-thread", "thread_id": None}
     ).status_code == 409
     dm = team.stable(workspace, "dm:writer")
-    assert client.post(
+    # A direct message has no threads: the reply lands in the conversation.
+    direct = client.post(
         base + f"/channels/{dm}/messages", json={**body, "client_id": "wrong-thread"}
-    ).status_code == 409
+    )
+    assert direct.status_code == 200 and direct.json()["thread_id"] is None
 
 
 @pytest.mark.parametrize("existing", [True, False])

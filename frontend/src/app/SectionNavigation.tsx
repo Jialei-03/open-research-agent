@@ -175,29 +175,6 @@ export function SectionNavigation({
             route.screen === "customize" && route.section === "workflows",
           )}
         </SidebarSection>
-        <SidebarSection title={t("customize.connections")}>
-          {item(
-            "machines",
-            Monitor,
-            t("customize.machines"),
-            "customize/machines",
-            route.screen === "customize" && route.section === "machines",
-          )}
-          {item(
-            "tracking",
-            LineChart,
-            t("customize.tracking"),
-            "customize/tracking",
-            route.screen === "customize" && route.section === "tracking",
-          )}
-          {item(
-            "models",
-            Sparkles,
-            t("customize.models"),
-            "customize/models",
-            route.screen === "customize" && route.section === "models",
-          )}
-        </SidebarSection>
       </div>
     );
   return null;

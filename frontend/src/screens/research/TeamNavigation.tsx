@@ -53,6 +53,7 @@ import {
 } from "../../app/sidebar-pagination";
 import { CreateWorkspaceDialog, WorkspacePicker } from "./WorkspaceDialogs";
 import { SidebarResearches } from "./SidebarResearches";
+import { GroupAvatar } from "./GroupAvatar";
 import styles from "./Team.module.css";
 import { defaultChannelNames, threadDate } from "./team-model";
 import nav from "./TeamNavigation.module.css";
@@ -128,49 +129,70 @@ export function ProjectHeader({
   const { data } = useResearchNavigation();
   const workspace = data.workspaces.find((w) => w.id === id);
   const all = parseAppRoute(hash).screen === "all-projects";
+  // Activity has no row of its own any more: its unread count rides on the menu that holds it.
+  const teams = useWorkspaceTeams(
+    data.workspaces.filter((w) => !w.archived).map((w) => w.id),
+  );
+  const unread = teams.get(id)?.activity_unread || 0;
   return (
     <div className={styles.switcher}>
       <h2 className={nav.projectName} data-id={sidebarId("workspace")}>
-        {all ? t("projects.all") : workspace?.name || t("workspace.choose")}
+        {all
+          ? t("projects.all")
+          : workspace?.name ||
+            t(
+              data.workspaces.length ? "workspace.choose" : "sidebar.noProject",
+            )}
       </h2>
       {id && !all && (
-        <Menu
-          label={t("research.actions")}
-          trigger={(props) => (
-            <IconButton
-              {...props}
-              data-id={sidebarId("project-menu")}
-              icon={MoreHorizontal}
-              label={t("research.actions")}
-            />
+        <span className={nav.menuAnchor}>
+          <Menu
+            label={t("sidebar.projectMenu")}
+            trigger={(props) => (
+              <IconButton
+                {...props}
+                data-id={sidebarId("project-menu")}
+                icon={MoreHorizontal}
+                label={t("sidebar.projectMenu")}
+              />
+            )}
+            items={[
+              {
+                id: "members",
+                icon: Users,
+                label: t("team.members"),
+                onSelect: () => go(settingsHash(id, "members")),
+              },
+              {
+                id: "settings",
+                icon: Settings,
+                label: t("team.settings"),
+                onSelect: () => go(settingsHash(id, "workflow")),
+              },
+              {
+                id: "activity",
+                icon: Bell,
+                label: t("team.activity"),
+                onSelect: () => go(teamHash(id, "mentions")),
+              },
+              {
+                id: "all",
+                icon: LayoutGrid,
+                label: t("projects.all"),
+                onSelect: () => go("all"),
+              },
+            ]}
+          />
+          {unread > 0 && (
+            <span
+              className={nav.menuCount}
+              role="img"
+              aria-label={t("team.unreadCount", { count: unread })}
+            >
+              {unread}
+            </span>
           )}
-          items={[
-            {
-              id: "members",
-              icon: Users,
-              label: t("team.members"),
-              onSelect: () => go(settingsHash(id, "members")),
-            },
-            {
-              id: "settings",
-              icon: Settings,
-              label: t("team.settings"),
-              onSelect: () => go(settingsHash(id, "workflow")),
-            },
-            {
-              id: "activity",
-              icon: Bell,
-              label: t("team.activity"),
-              onSelect: () => go(teamHash(id, "mentions")),
-            },
-            {
-              id: "all",
-              icon: LayoutGrid,
-              label: t("projects.all"),
-              onSelect: () => go("all"),
-            },
-          ]}
-        />
+        </span>
       )}
     </div>
   );
@@ -218,7 +240,6 @@ export function TeamNavigation({
     return ready ? (
       <div className={nav.empty} data-sidebar-place="empty">
         <FolderPlus size={24} aria-hidden="true" />
-        <span>{t("sidebar.noProject")}</span>
         <Button
           size="sm"
           variant="secondary"
@@ -430,9 +451,7 @@ export function TeamConversationList({
           {member ? (
             <span className={nav.memberAvatar} aria-hidden />
           ) : (
-            <span className={nav.channelAvatar}>
-              <Hash size={16} aria-hidden="true" />
-            </span>
+            <GroupAvatar members={team?.members || []} />
           )}
           <span className={nav.content}>
             <span className={nav.line}>
@@ -496,7 +515,7 @@ export function TeamConversationList({
           {waiting > 0 && (
             <span
               className={nav.waitingCount}
-              aria-label={t("team.unreadCount", { count: waiting })}
+              aria-label={tn("inbox.badge", waiting)}
             >
               {waiting}
             </span>
@@ -542,7 +561,7 @@ export function TeamConversationList({
         <IconButton
           data-id={sidebarId("add-member")}
           icon={Plus}
-          label={t("members.add")}
+          label={t("members.hire")}
           onClick={() => go(settingsHash(id, "members"))}
         />
       </div>

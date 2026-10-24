@@ -32,7 +32,13 @@ export function TeamCatchup({
       data-testid="team-catchup"
     >
       <header>
-        <strong>{t("team.catchup.title")}</strong>
+        <strong>
+          {summary.since
+            ? t("team.catchup.since", {
+                time: sinceLabel(summary.since, locale),
+              })
+            : t("team.catchup.title")}
+        </strong>
         <IconButton
           size="sm"
           icon={open ? ChevronDown : ChevronRight}
@@ -42,28 +48,30 @@ export function TeamCatchup({
         />
       </header>
       {open && (
-        <div className={styles.events}>
+        <ul className={styles.events}>
           {summary.new_messages > 0 && (
-            <span>{tn("team.catchup.messages", summary.new_messages)}</span>
+            <li>{tn("team.catchup.messages", summary.new_messages)}</li>
           )}
           {summary.completed.map((item) => (
-            <span key={item.member_id}>
+            <li key={item.member_id}>
               {tn("team.catchup.completed", item.count, {
                 name: name(item.member_id),
               })}
-            </span>
+            </li>
           ))}
           {summary.files.map((file) =>
             file.deleted ? (
-              <span key={file.path}>
+              <li key={file.path}>
                 {t("team.catchup.deleted", { path: file.name })}
-              </span>
+              </li>
             ) : (
-              <TeamFileCard key={file.path} file={file} onFile={onFile} />
+              <li key={file.path} className={styles.file}>
+                <TeamFileCard file={file} onFile={onFile} />
+              </li>
             ),
           )}
           {summary.handoffs.map((item) => (
-            <span key={item.message_id}>
+            <li key={item.message_id}>
               {t("team.catchup.handoff", {
                 name: name(item.member_id),
                 to: new Intl.ListFormat(locale, {
@@ -71,25 +79,25 @@ export function TeamCatchup({
                   type: "conjunction",
                 }).format(item.to.map(name)),
               })}
-            </span>
+            </li>
           ))}
           {summary.waiting.map((item) => (
-            <span key={item.message_id}>
+            <li key={item.message_id} data-tone="waiting">
               {t("team.catchup.waiting", {
                 name: name(item.member_id),
                 text: item.text,
               })}
-            </span>
+            </li>
           ))}
           {summary.failed.map((item) => (
-            <span key={item.message_id}>
+            <li key={item.message_id} data-tone="failed">
               {t("team.catchup.failed", {
                 name: name(item.member_id),
                 text: item.text,
               })}
-            </span>
+            </li>
           ))}
-        </div>
+        </ul>
       )}
       {summary.first_unread && (
         <Button variant="ghost" size="sm" onClick={onJump}>
@@ -112,4 +120,18 @@ export function catchupAnchor(
         (summary.first_unread?.thread_id || summary.first_unread?.id),
     )?.id || messages[0].id
   );
+}
+
+/** When you left: the time today, the weekday this week, else the date. */
+function sinceLabel(value: string, locale: string) {
+  const at = new Date(value);
+  const days = (Date.now() - at.getTime()) / 86400000;
+  const time = at.toLocaleTimeString(locale, {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+  if (new Date().toDateString() === at.toDateString()) return time;
+  return days < 6
+    ? `${at.toLocaleDateString(locale, { weekday: "short" })} ${time}`
+    : at.toLocaleDateString(locale, { month: "short", day: "numeric" });
 }

@@ -257,12 +257,14 @@ def test_research_adapter_jobs_legacy_and_normalized_text(world):
     experiments = next(
         c["id"] for c in overview["channels"] if c["key"] == "experiments"
     )
-    root = a.get(base + f"/channels/{experiments}/messages").json()["messages"][0]
+    assert not a.get(base + f"/channels/{experiments}/messages").json()["messages"]
+    adapted = a.get(
+        base + f"/channels/{experiments}/messages",
+        params={"thread_id": f"research:{pid}"},
+    ).json()
+    root = adapted["root"]
     assert root["id"] == f"research:{pid}"
     assert root["replies"] == 2
-    adapted = a.get(
-        base + f"/channels/{experiments}/messages", params={"thread_id": root["id"]}
-    ).json()
     assert adapted["research"]["events"][-1]["detail"]["text"] == "old message"
     assert adapted["research"]["sprints"][0]["summary"] == "handoff"
     assert adapted["research"]["jobs"][0]["command"] == "test"

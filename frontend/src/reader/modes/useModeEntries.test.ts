@@ -100,7 +100,7 @@ describe("translation menu", () => {
           children: createElement(Probe),
         }),
       );
-      expect(window.location.hash).toBe("customize/models");
+      expect(window.location.hash).toBe("settings/models");
     } finally {
       settings.models = saved;
       vi.unstubAllGlobals();

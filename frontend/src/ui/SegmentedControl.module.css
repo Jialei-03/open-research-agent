@@ -18,7 +18,8 @@
   min-width: 0;
   padding: var(--segmented-inset);
   border-radius: var(--ui-r-pill);
-  background: var(--ui-fill);
+  /* No track: the chosen item is the app's one selected look, a light grey fill. */
+  background: transparent;
 }
 
 .sm {
@@ -37,8 +38,7 @@
   left: 0;
   height: var(--segmented-item);
   border-radius: var(--ui-r-pill);
-  background: var(--ui-elev);
-  box-shadow: var(--ui-elev-1);
+  background: var(--ui-selected);
   /* Under the labels, and out of the way of the pointer. */
   pointer-events: none;
   /* Until it has been placed. */
@@ -84,6 +84,7 @@
 }
 
 .item:hover {
+  background: var(--ui-hover);
   color: var(--ui-fg);
 }
 

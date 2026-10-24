@@ -11,6 +11,19 @@ import type {
 const dmId = (member: string) =>
   `d0000000-0000-4000-8000-${Buffer.from(member).toString("hex").padStart(12, "0").slice(-12)}`;
 
+// The members page's hire button opens a small dialog; a blank start opens the
+// member form. (The sidebar's "+" beside the direct messages leads to this page.)
+const addMember = async (page: Page) => {
+  await page
+    .getByRole("region", { name: "团队设置", exact: true })
+    .getByRole("button", { name: "招人", exact: true })
+    .click();
+  await page
+    .getByRole("dialog", { name: "招人", exact: true })
+    .getByRole("button", { name: "空白开始", exact: true })
+    .click();
+};
+
 const wid = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const cid = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
 const defaults = (name: string): MemberConfig => ({
@@ -73,6 +86,7 @@ async function setup(page: Page, extraMembers: TeamMember[] = []) {
     { id: "library-ada", version: 1, config: defaults("Ada"), teams: [] },
   ];
   const saved: Record<string, unknown>[] = [];
+  const drafts: Record<string, unknown>[] = [];
   const images = new Map<string, { extension: string; content: string }>();
   const channels = () => [
     {
@@ -156,6 +170,18 @@ async function setup(page: Page, extraMembers: TeamMember[] = []) {
           config: { ...config, channels: body.channels ?? [] },
           warnings: [],
         },
+      });
+    }
+    if (path.endsWith("/members/draft")) {
+      const body = route.request().postDataJSON();
+      drafts.push(body);
+      const config = {
+        ...defaults("Drafted statistician"),
+        description: body.description,
+        role_description: "# Statistician\nCheck every p-value",
+      };
+      return route.fulfill({
+        json: { source: documentSource(config), config },
       });
     }
     if (path.endsWith("/import-agent")) {
@@ -337,6 +363,7 @@ async function setup(page: Page, extraMembers: TeamMember[] = []) {
   await page.goto(`/#team/${wid}/settings?thread=members`);
   return {
     saved,
+    drafts,
     externalUpdate: (name: string, source: string, error = "") => {
       members = members.map((m) =>
         m.name === name
@@ -418,7 +445,7 @@ test("上传头像随成员保存，取消不写入", async ({ page }) => {
     "base64",
   );
   for (const save of [false, true]) {
-    await page.getByRole("button", { name: "添加成员", exact: true }).click();
+    await addMember(page);
     const dialog = page.getByRole("dialog");
     await dialog.getByLabel("名字", { exact: true }).fill("Ada");
     await dialog.getByLabel("上传图片", { exact: true }).setInputFiles({
@@ -471,7 +498,7 @@ test("自定义头像加载失败回退到像素动物", async ({ page }) => {
 
 test("创建、工具、权限、订阅和成员详情", async ({ page }) => {
   const { saved: writes } = await setup(page);
-  await page.getByRole("button", { name: "添加成员", exact: true }).click();
+  await addMember(page);
   const dialog = page.getByRole("dialog");
   await dialog.getByLabel("名字", { exact: true }).fill("Ada");
   await dialog
@@ -654,9 +681,44 @@ for (const locale of ["zh", "en"] as const) {
   });
 }
 
+test("招人：一句话起草设定，进入成员表单后再保存", async ({ page }) => {
+  const { saved, drafts } = await setup(page);
+  const hire = page
+    .getByRole("region", { name: "团队设置", exact: true })
+    .getByRole("button", { name: "招人", exact: true });
+  await hire.click();
+  const dialog = page.getByRole("dialog", { name: "招人", exact: true });
+  // Nothing to draft from yet.
+  await expect(
+    dialog.getByRole("button", { name: "起草", exact: true }),
+  ).toBeDisabled();
+  await dialog
+    .getByRole("textbox", { name: "要什么样的同事" })
+    .fill("检查显著性检验的统计师");
+  await dialog.getByRole("button", { name: "起草", exact: true }).click();
+  // The drafted file opens in the usual form, filled in, and nothing is saved until the researcher does.
+  const form = page.getByRole("dialog", { name: "添加成员", exact: true });
+  await expect(form.getByLabel("名字", { exact: true })).toHaveValue(
+    "Drafted statistician",
+  );
+  await expect(form.getByLabel("角色说明", { exact: true })).toHaveValue(
+    "# Statistician\nCheck every p-value",
+  );
+  expect(drafts).toEqual([{ description: "检查显著性检验的统计师" }]);
+  expect(saved).toEqual([]);
+  await form.getByRole("button", { name: "保存", exact: true }).click();
+  await expect(
+    page.getByRole("button", { name: "Drafted statistician", exact: true }),
+  ).toBeVisible();
+  expect(saved).toHaveLength(1);
+  expect(saved[0]).toMatchObject({
+    config: { name: "Drafted statistician" },
+  });
+});
+
 test("复制内置成员、编辑和停用", async ({ page }) => {
   await setup(page);
-  await page.getByRole("button", { name: "添加成员", exact: true }).click();
+  await addMember(page);
   const dialog = page.getByRole("dialog");
   await dialog
     .getByLabel("成员来源", { exact: true })
@@ -691,7 +753,7 @@ test("复制内置成员、编辑和停用", async ({ page }) => {
 
 test("成员库加入团队和同步确认", async ({ page }) => {
   const { saved: writes } = await setup(page);
-  await page.getByRole("button", { name: "添加成员", exact: true }).click();
+  await addMember(page);
   await page
     .getByRole("dialog")
     .getByLabel("成员来源", { exact: true })
@@ -730,7 +792,7 @@ test("成员库加入团队和同步确认", async ({ page }) => {
 
 test("表单、源文件互转保留扩展字段，错误保留当前内容", async ({ page }) => {
   const { saved } = await setup(page);
-  await page.getByRole("button", { name: "添加成员", exact: true }).click();
+  await addMember(page);
   const dialog = page.getByRole("dialog");
   await dialog.getByLabel("名字", { exact: true }).fill("Ada");
   await dialog.getByLabel("简介", { exact: true }).fill("Checks references");
@@ -771,7 +833,7 @@ test("表单、源文件互转保留扩展字段，错误保留当前内容", as
 
 test("选择 Claude 文件和粘贴 Codex 角色", async ({ page }) => {
   const { saved } = await setup(page);
-  await page.getByRole("button", { name: "添加成员", exact: true }).click();
+  await addMember(page);
   let dialog = page.getByRole("dialog");
   await dialog.getByRole("button", { name: "导入", exact: true }).click();
   await dialog.getByLabel("选择文件", { exact: true }).setInputFiles({
@@ -794,7 +856,7 @@ test("选择 Claude 文件和粘贴 Codex 角色", async ({ page }) => {
   await expect
     .poll(() => saved[0])
     .toMatchObject({ config: { name: "Claude reader" } });
-  await page.getByRole("button", { name: "添加成员", exact: true }).click();
+  await addMember(page);
   dialog = page.getByRole("dialog");
   await dialog.getByRole("button", { name: "导入", exact: true }).click();
   await dialog.getByLabel("格式", { exact: true }).selectOption("agent.toml");
@@ -830,7 +892,7 @@ test("重新打开成员读取外部修改，坏文件显示行号和上一份�
   page,
 }) => {
   const { externalUpdate } = await setup(page);
-  await page.getByRole("button", { name: "添加成员", exact: true }).click();
+  await addMember(page);
   const dialog = page.getByRole("dialog");
   await dialog.getByLabel("名字", { exact: true }).fill("Ada");
   await dialog.getByLabel("角色说明", { exact: true }).fill("Last valid body");
@@ -912,7 +974,7 @@ test("成员列表、私信侧栏和消息头像使用一致的状态点", async
       // The avatar and its dot belong to the card trigger beside the conversation link.
       const sidebar = page
         .getByRole("navigation", { name: "侧栏", exact: true })
-        .getByRole("group", { name: "消息", exact: true })
+        .getByRole("group", { name: "私聊", exact: true })
         .getByRole("button", {
           name: createTranslator("zh").t("team.colleague.card", {
             name: members[index].name,

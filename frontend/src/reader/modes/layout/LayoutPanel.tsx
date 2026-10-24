@@ -186,7 +186,7 @@ export function LayoutPanel({ layout }: { layout: Layout }) {
         {!layout.hasModel && (
           <p className={styles.note}>
             {t("reader.layout.noModel")}{" "}
-            <a className={styles.link} href="#customize/models">
+            <a className={styles.link} href="#settings/models">
               {t("reader.layout.toSettings")}
             </a>
           </p>

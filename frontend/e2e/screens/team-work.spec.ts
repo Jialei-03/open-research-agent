@@ -112,10 +112,12 @@ test("work navigation groups derived work, opens threads and shows member attent
     }),
   );
   await signIn(page);
-  await page.goto(`/#team/${wid}/threads`);
+  await page.goto(`/#team/${wid}/${experiments}`);
   await page
-    .locator('[data-sidebar-place="research"] [data-id="work"]')
+    .getByRole("navigation", { name: "侧栏", exact: true })
+    .locator('[data-id="board"]')
     .click();
+  await expect(page).toHaveURL(new RegExp(`#team/${wid}/work$`));
   const board = page.getByTestId("team-work");
   await expect(board).toBeVisible();
   await expect(
@@ -124,13 +126,33 @@ test("work navigation groups derived work, opens threads and shows member attent
   await expect(board).toContainText(tn("team.work.asks", 2));
   await expect(board).toContainText(t("team.work.partial"));
   await expect(board).toContainText(t("team.work.stuck"));
-  const done = board
-    .locator("details")
-    .filter({ hasText: tn("team.work.group.done", 1) });
-  await expect(done).not.toHaveAttribute("open");
-  await expect(done.getByRole("link")).toBeHidden();
-  await done.locator("summary").click();
-  await expect(done.getByRole("link")).toBeVisible();
+  // Four columns by state; review is work under way.
+  const lane = (name: string) =>
+    board.getByRole("region", { name, exact: true });
+  await expect(board.getByRole("region")).toHaveText([
+    new RegExp(`^${t("board.lane.queued")}`),
+    new RegExp(`^${t("board.lane.working")}`),
+    new RegExp(`^${t("board.lane.waiting")}`),
+    new RegExp(`^${t("board.lane.done")}`),
+  ]);
+  for (const [name, topics] of [
+    [t("board.lane.queued"), ["queued topic"]],
+    [t("board.lane.working"), ["review topic", "working topic"]],
+    [t("board.lane.waiting"), ["waiting topic"]],
+    [t("board.lane.done"), ["done topic"]],
+  ] as const)
+    await expect(lane(name).getByRole("link")).toHaveText(
+      topics.map((topic) => new RegExp(topic)),
+    );
+  await expect(
+    lane(t("board.lane.waiting")).getByText(t("team.work.stuck")),
+  ).toBeVisible();
+  // By colleague: one column each, holding all their work; research-only has none here.
+  await board.getByRole("radio", { name: t("board.byMember") }).click();
+  await expect(lane("Ada").getByRole("link")).toHaveCount(5);
+  await board.getByRole("radio", { name: t("board.research") }).click();
+  await expect(board.getByRole("link")).toHaveCount(0);
+  await board.getByRole("radio", { name: t("board.byState") }).click();
   await board.getByRole("link").filter({ hasText: "waiting topic" }).click();
   await expect(page).toHaveURL(
     new RegExp(`team/${wid}/${experiments}\\?thread=thread-waiting`),

@@ -80,10 +80,11 @@ test("layout and font features match the desktop reference", async ({
     ["--ui-dialog-md", "540px"],
   ])
     await expect(html).toHaveCSS(token, value);
-  await expect(html).toHaveCSS(
-    "font-feature-settings",
-    '"cv11", "ss03", "calt"',
+  // The browser may list the features in its own order.
+  const features = await html.evaluate(
+    (element) => getComputedStyle(element).fontFeatureSettings,
   );
+  expect(features.split(", ").sort()).toEqual(['"calt"', '"cv11"', '"ss03"']);
   await expect(html).toHaveCSS("font-optical-sizing", "auto");
   await expect(html).toHaveCSS("font-synthesis-weight", "none");
   await expect(html).toHaveCSS("text-autospace", "normal");

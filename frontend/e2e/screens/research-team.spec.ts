@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 import { signIn } from "../reader/fixtures";
 import { createTranslator } from "../../src/i18n/i18n";
 import type {
@@ -15,6 +15,17 @@ const dm = "10000000-0000-0000-0000-000000000003";
 const research = "10000000-0000-0000-0000-000000000004";
 const otherWorkspace = "10000000-0000-0000-0000-000000000005";
 const stamp = "2026-10-23T10:00:00+00:00";
+
+/** A file opens in the right panel beside the conversation, never in place of it. */
+const openFile = (page: Page, path: string) =>
+  page
+    .getByTestId("team-side-panel")
+    .getByRole("region", { name: path, exact: true });
+const hidePanel = (page: Page, label: string) =>
+  page
+    .getByTestId("team-side-panel")
+    .getByRole("button", { name: label, exact: true })
+    .click();
 
 function changedReply(): TeamMessage {
   return {
@@ -147,14 +158,23 @@ for (const [locale, theme, width] of [
     await card
       .getByRole("button", { name: "conclusion.md", exact: true })
       .click();
+    // The file opens on the right panel's files tab; the conversation stays.
+    await expect(openFile(page, "conclusion.md")).toContainText(
+      "Saved conclusion",
+    );
     await expect(
-      page.getByRole("complementary", { name: "conclusion.md", exact: true }),
-    ).toContainText("Saved conclusion");
+      page
+        .getByTestId("team-side-panel")
+        .getByRole("radio", { name: t("panel.files"), exact: true }),
+    ).toBeChecked();
+    await expect(row).toBeVisible();
     expect(filesRead).toBe(1);
-    await page
-      .getByRole("complementary", { name: "conclusion.md", exact: true })
+    await openFile(page, "conclusion.md")
       .getByRole("button", { name: t("common.close"), exact: true })
       .click();
+    await expect(openFile(page, "conclusion.md")).toHaveCount(0);
+    await expect(row).toBeVisible();
+    await hidePanel(page, t("team.hidePanel"));
     await profile.last().click();
     await page.keyboard.press("Escape");
     await expect(card).toHaveCount(0);
@@ -169,9 +189,7 @@ for (const [locale, theme, width] of [
     await expect(header).toContainText("Checking citations");
     if (width === 1440)
       await expect(
-        page.locator(
-          `[data-id="conversation"][href="#team/${workspace}/${direct}"]`,
-        ),
+        page.locator(`[data-id="dm"][href="#team/${workspace}/${direct}"]`),
       ).toContainText("Checking citations");
     member.status_text = "";
     await page.evaluate(() =>
@@ -211,8 +229,15 @@ for (const [locale, theme, width] of [
     );
     const { messages } = await setup(page);
     await expect(
-      page.locator(`[data-message-id="research:${research}"]`),
+      page.getByTestId("team-screen").getByRole("textbox", {
+        name: t("team.message"),
+        exact: true,
+      }),
     ).toBeVisible();
+    // The research is not a message of the channel.
+    await expect(
+      page.locator(`[data-message-id="research:${research}"]`),
+    ).toHaveCount(0);
     for (let index = 0; index < 6; index++)
       messages.push({
         id: `catchup-${index}`,
@@ -288,15 +313,16 @@ for (const [locale, theme, width] of [
     await summary
       .getByRole("button", { name: "conclusion.md", exact: true })
       .click();
-    await expect(
-      page.getByRole("complementary", { name: "conclusion.md", exact: true }),
-    ).toContainText("Saved conclusion");
-    // At 720px the preview replaces the channel, so the summary is checked
-    // with the preview closed.
-    await page
-      .getByRole("complementary", { name: "conclusion.md", exact: true })
+    await expect(openFile(page, "conclusion.md")).toContainText(
+      "Saved conclusion",
+    );
+    // The summary stays above the unread messages while the file is open.
+    await expect(summary).toBeVisible();
+    await openFile(page, "conclusion.md")
       .getByRole("button", { name: t("common.close"), exact: true })
       .click();
+    // At 720px the panel covers part of the channel: close it before using the summary.
+    await hidePanel(page, t("team.hidePanel"));
     const readBeforePoll = reads;
     data.show = false;
     await page.evaluate(() =>
@@ -883,6 +909,31 @@ async function setup(page: import("@playwright/test").Page) {
         });
       return route.fulfill({ json: { ok: true } });
     }
+    // The project's files and a file's history, for the right panel's files tab.
+    if (path.endsWith("/files"))
+      return route.fulfill({
+        json: {
+          path: url.searchParams.get("path") || "",
+          entries: [
+            {
+              name: "shared",
+              path: "shared",
+              type: "dir",
+              size: 0,
+              modified: 0,
+            },
+            {
+              name: "plan.md",
+              path: "plan.md",
+              type: "file",
+              size: 9,
+              modified: 0,
+            },
+          ],
+          truncated: false,
+        },
+      });
+    if (path.endsWith("/file/history")) return route.fulfill({ json: [] });
     if (path.endsWith("/deliveries"))
       return route.fulfill({ json: deliveries });
     if (path.includes("/deliveries/")) {
@@ -999,14 +1050,12 @@ async function setup(page: import("@playwright/test").Page) {
       };
       return route.fulfill({
         json: {
+          // The channel does not list the research: it opens as the thread
+          // research:<id>, and the sidebar lists it.
           activity: thread
             ? []
-            : [
-                ...(target === channel ? [root] : []),
-                ...messages.filter((m) => m.channel_id === target),
-              ],
+            : messages.filter((m) => m.channel_id === target),
           messages: [
-            ...(!thread && target === channel ? [root] : []),
             ...messages.filter(
               (m) =>
                 m.channel_id === target && m.thread_id === (thread || null),
@@ -1080,7 +1129,14 @@ for (const locale of ["zh", "en"] as const) {
     await thread
       .getByRole("button", { name: t("common.close"), exact: true })
       .click();
+    // The pins button opens the panel on the files tab, where the pins are listed.
+    await page
+      .getByRole("button", { name: tn("team.pins", 1), exact: true })
+      .click();
     const panel = page.getByTestId("team-side-panel");
+    await expect(
+      panel.getByRole("radio", { name: t("panel.files"), exact: true }),
+    ).toBeChecked();
     const pin = panel.locator('[data-pin-id="pinned-answer"]');
     await expect(pin).toContainText("A pinned finding");
     await expect(pin).toContainText("finding.md");
@@ -1267,7 +1323,11 @@ test("member answers stay inline until the user replies; threads show participan
   await expect(screen.locator('[data-message-id="thread-answer"]')).toHaveCount(
     0,
   );
-  await screen.getByRole("button", { name: "研究问题", exact: true }).click();
+  // The research is not in the channel; its thread opens by its address.
+  await expect(
+    screen.getByRole("button", { name: "研究问题", exact: true }),
+  ).toHaveCount(0);
+  await page.goto(`/#team/${workspace}/${channel}?thread=research:${research}`);
   await expect(thread.getByRole("heading", { name: "研究问题" })).toBeVisible();
 });
 
@@ -1288,9 +1348,16 @@ test("mention completion, queue edits, immediate send and direct messages", asyn
     .poll(() => posted.some((m) => m.text === "@advisor a"))
     .toBe(true);
   await composer.fill("@advisor 排队消息");
+  const sidebar = page.getByRole("navigation", { name: "侧栏", exact: true });
   await expect(
-    page.getByRole("navigation").getByRole("img", { name: "工作中" }),
+    sidebar
+      .getByRole("group", { name: "私聊", exact: true })
+      .getByRole("img", { name: "工作中" }),
   ).toBeVisible();
+  // Both projects' tiles carry the working dot (the mock serves one team to both).
+  await expect(
+    sidebar.locator('[data-id="project"]').getByRole("img", { name: "工作中" }),
+  ).toHaveCount(2);
   await expect(
     page
       .getByTestId("team-screen")
@@ -1400,11 +1467,13 @@ for (const theme of ["light", "dark"] as const) {
     await page.reload();
     const screen = page.getByTestId("team-screen");
     const sidebar = page.getByRole("navigation", { name: "侧栏", exact: true });
-    const switcher = sidebar.getByRole("button", {
-      name: "切换项目",
+    // The project's name heads the sidebar; the projects are the rail's tiles.
+    const projectName = sidebar.getByRole("heading", {
+      name: "表示学习",
+      level: 2,
       exact: true,
     });
-    await expect(switcher).toHaveText("表示学习");
+    await expect(projectName).toBeVisible();
     for (const [role, status] of [
       ["advisor", "工作中"],
       ["reviewer", "等你"],
@@ -1415,7 +1484,7 @@ for (const theme of ["light", "dark"] as const) {
         .locator(`[data-message-id="status-${role}"]`)
         .getByRole("img", { name: status, exact: true });
       const dmRow = sidebar
-        .getByRole("group", { name: "消息", exact: true })
+        .getByRole("group", { name: "私聊", exact: true })
         .getByRole("link", { name: role, exact: true });
       const marker = dmRow
         .locator("..")
@@ -1490,17 +1559,18 @@ for (const theme of ["light", "dark"] as const) {
         () => document.documentElement.scrollWidth <= innerWidth,
       ),
     ).toBe(true);
-    await sidebar
-      .getByRole("button", { name: "展开侧栏", exact: true })
-      .click();
-    await switcher.click();
-    const picker = page.getByRole("dialog", { name: "选择项目", exact: true });
-    await picker.getByRole("option", { name: /图学习/ }).click();
+    // Another project is one click on its tile, even with the sidebar folded.
+    await sidebar.getByRole("link", { name: "图学习", exact: true }).click();
     await expect(page).toHaveURL(new RegExp(`#team/${otherWorkspace}$`));
     await sidebar
       .getByRole("button", { name: "展开侧栏", exact: true })
       .click();
-    await expect(switcher).toHaveText("图学习");
+    await expect(
+      sidebar.getByRole("heading", { name: "图学习", level: 2, exact: true }),
+    ).toBeVisible();
+    await expect(
+      sidebar.getByRole("link", { name: "图学习", exact: true }),
+    ).toHaveAttribute("aria-current", "page");
   });
 }
 
@@ -1593,12 +1663,13 @@ test("one author, preserved draft, one timeout and Continue on the agent message
   ).toHaveCount(1);
   await expect(page.getByTestId("team-queue")).toHaveCount(0);
   await row.getByRole("button", { name: "intro.md", exact: true }).click();
-  const preview = page.getByRole("complementary", {
-    name: "drafts/intro.md",
-    exact: true,
-  });
+  const preview = openFile(page, "drafts/intro.md");
   await expect(
     preview.getByText("已保存的正文", { exact: true }),
+  ).toBeVisible();
+  // The reply stays beside its file.
+  await expect(
+    row.getByRole("button", { name: "继续", exact: true }),
   ).toBeVisible();
   await preview.getByRole("button", { name: "关闭", exact: true }).click();
   await row.getByRole("button", { name: "继续", exact: true }).click();
@@ -1947,7 +2018,9 @@ test("stopping a queued member leaves a stopped reply and failures keep their ou
   await row.hover();
   await row.getByRole("button", { name: "停止", exact: true }).click();
   await expect.poll(() => cancelled).toBe(1);
-  await expect(row.getByText("已停止", { exact: true })).toHaveCount(1);
+  // The task head's chip and the turn's own line both say it stopped.
+  await expect(row.locator('[data-state="cancelled"]')).toHaveText("已停止");
+  await expect(row.getByText("已停止", { exact: true })).toHaveCount(2);
   await expect(row.getByText("排队中", { exact: true })).toHaveCount(0);
   await expect(
     row.getByRole("button", { name: "停止", exact: true }),
@@ -2249,57 +2322,83 @@ for (const theme of ["light", "dark"] as const) {
     const rail = sidebar.locator(":scope > div").first();
     await expect(rail).toHaveCSS("padding", "8px 0px 12px");
     await expect(rail).toHaveCSS("border-radius", "0px");
-    const destination = rail.getByRole("link", { name: "研究", exact: true });
-    await expect(destination).toHaveCSS("width", "36px");
-    await expect(destination).toHaveCSS("height", "36px");
-    await expect(destination).toHaveCSS("border-radius", "10px");
-    await expect(destination.locator("svg")).toHaveAttribute("width", "18");
-    await expect(destination.locator("svg")).toHaveCSS("stroke-width", "2px");
-    await expect(destination).not.toHaveCSS("box-shadow", "none");
+    // The rail: all projects, a tile per project, a new project, then the other places.
+    // Each is one 36px square with a 10px radius; icons are 18px.
+    for (const [role, name] of [
+      ["link", "全部项目"],
+      ["link", "表示学习"],
+      ["link", "图学习"],
+      ["button", "新建项目"],
+      ["link", "资料"],
+    ] as const) {
+      const destination = rail.getByRole(role, { name, exact: true });
+      await expect(destination).toHaveCSS("width", "36px");
+      await expect(destination).toHaveCSS("height", "36px");
+      await expect(destination).toHaveCSS("border-radius", "10px");
+      if (name !== "表示学习" && name !== "图学习")
+        await expect(destination.locator("svg")).toHaveAttribute("width", "18");
+    }
+    // The open project's tile is the selected one, and looks it.
+    const tile = rail.getByRole("link", { name: "表示学习", exact: true });
+    const other = rail.getByRole("link", { name: "图学习", exact: true });
+    await expect(tile).toHaveAttribute("aria-current", "page");
+    await expect(other).not.toHaveAttribute("aria-current", "page");
+    const fill = (locator: typeof tile) =>
+      locator.evaluate((node) => getComputedStyle(node).backgroundColor);
+    expect(await fill(tile)).not.toBe(await fill(other));
     const pane = sidebar.locator(":scope > div").nth(1);
     await expect(pane).toHaveCSS("width", "264px");
-    const switcher = sidebar.getByRole("button", {
-      name: "切换项目",
+    const projectName = sidebar.getByRole("heading", {
+      name: "表示学习",
+      level: 2,
       exact: true,
     });
-    await expect(switcher).toHaveCSS("font-size", "14px");
-    await expect(switcher.locator("xpath=../..")).toHaveCSS("height", "52px");
+    await expect(projectName).toHaveCSS("font-size", "14px");
+    await expect(projectName.locator("xpath=../..")).toHaveCSS(
+      "height",
+      "52px",
+    );
     const resize = page.getByRole("separator", {
       name: "调整侧栏宽度",
       exact: true,
     });
     await expect(resize).toHaveAttribute("aria-valuenow", "264");
-    for (const label of ["新研究", "动态", "工作"]) {
+    // The fixed entries are two rows of one look.
+    for (const label of ["待你决定", "看板"]) {
       const row = sidebar.getByRole("link", { name: label, exact: true });
       await expect(row).toHaveCSS("height", "34px");
       await expect(row).toHaveCSS("font-size", "14px");
       await expect(row).toHaveCSS("padding", "0px 10px");
       await expect(row).toHaveCSS("gap", "10px");
     }
-    const messagesHeading = sidebar
-      .getByText("消息", { exact: true })
-      .locator("..");
-    await expect(messagesHeading).toHaveCSS("height", "26px");
-    await expect(messagesHeading).toHaveCSS("font-size", "12px");
-    await expect(messagesHeading).toHaveCSS("font-weight", "400");
-    const addChannel = messagesHeading.getByRole("button");
-    await expect(addChannel).toHaveCSS("width", "24px");
-    await expect(addChannel).toHaveCSS("height", "24px");
-    await expect(addChannel).toHaveCSS("border-radius", "6px");
+    // Research, groups and direct messages are three lists under one kind of heading.
+    for (const heading of ["研究", "群聊", "私聊"]) {
+      const title = sidebar.getByText(heading, { exact: true }).locator("..");
+      await expect(title).toHaveCSS("height", "26px");
+      await expect(title).toHaveCSS("font-size", "12px");
+      await expect(title).toHaveCSS("font-weight", "400");
+      const add = title.getByRole("button");
+      await expect(add).toHaveCSS("width", "24px");
+      await expect(add).toHaveCSS("height", "24px");
+      await expect(add).toHaveCSS("border-radius", "6px");
+    }
+    const groups = sidebar.getByRole("group", { name: "群聊", exact: true });
     const conversations = sidebar.getByRole("group", {
-      name: "消息",
+      name: "私聊",
       exact: true,
     });
+    await expect(groups).toHaveCSS("gap", "1px");
     await expect(conversations).toHaveCSS("gap", "1px");
     const frequent = sidebar.getByRole("group", {
       name: "常用成员",
       exact: true,
     });
     await expect(frequent).toHaveCount(0);
-    await expect(conversations.getByRole("link")).toHaveCount(7);
+    await expect(groups.getByRole("link")).toHaveCount(1);
+    await expect(conversations.getByRole("link")).toHaveCount(6);
+    // Direct messages by latest activity.
     for (const [index, name] of [
       "advisor",
-      "实验",
       "executor",
       "librarian",
       "reviewer",
@@ -2309,7 +2408,7 @@ for (const theme of ["light", "dark"] as const) {
       await expect(
         conversations.getByRole("link").nth(index),
       ).toHaveAccessibleName(name);
-    const experiment = conversations.getByRole("link", {
+    const experiment = groups.getByRole("link", {
       name: "实验",
       exact: true,
     });
@@ -2349,22 +2448,18 @@ for (const theme of ["light", "dark"] as const) {
         .getByRole("link", { name: "reviewer", exact: true })
         .locator("time"),
     ).toHaveText("10月18日");
-    for (const [label, count] of [["动态", 2]] as const) {
-      const shortcut = sidebar
-        .getByRole("link", { name: label, exact: true })
-        .locator("xpath=ancestor::div[1]");
-      const badge = shortcut.getByLabel(`${count} 条未读`, { exact: true });
-      await expect(badge).toHaveText(String(count));
-      const color = await badge.evaluate((node) => {
-        const probe = document.createElement("span");
-        probe.style.color = "var(--ui-danger)";
-        node.appendChild(probe);
-        const expected = getComputedStyle(probe).color;
-        probe.remove();
-        return expected;
-      });
-      await expect(badge).toHaveCSS("background-color", color);
-    }
+    // Activity has no row; its unread count sits on the project's menu button.
+    const menuCount = sidebar.getByLabel("2 条未读", { exact: true });
+    await expect(menuCount).toHaveText("2");
+    const color = await menuCount.evaluate((node) => {
+      const probe = document.createElement("span");
+      probe.style.color = "var(--ui-danger)";
+      node.appendChild(probe);
+      const expected = getComputedStyle(probe).color;
+      probe.remove();
+      return expected;
+    });
+    await expect(menuCount).toHaveCSS("background-color", color);
     const add = sidebar.getByRole("button", { name: "新建频道", exact: true });
     await add.click();
     await expect(
@@ -2385,9 +2480,11 @@ for (const theme of ["light", "dark"] as const) {
       .getByRole("button", { name: "展开侧栏", exact: true })
       .click();
     await expect(conversations).toBeVisible();
-    await expect(
-      sidebar.getByRole("link", { name: "团队设置", exact: true }),
-    ).toBeVisible();
+    for (const label of ["待你决定", "看板"])
+      await expect(
+        sidebar.getByRole("link", { name: label, exact: true }),
+      ).toBeVisible();
+    await expect(sidebar.locator('[data-id="project-menu"]')).toBeVisible();
     expect(
       await sidebar.evaluate((node) => node.scrollWidth <= node.clientWidth),
     ).toBe(true);
@@ -2400,13 +2497,14 @@ for (const theme of ["light", "dark"] as const) {
     for (const count of [2, 1, 0, 3]) {
       directs.splice(0, directs.length, ...allDirects.slice(0, count));
       await expect(frequent).toHaveCount(0);
-      await expect(conversations.getByRole("link")).toHaveCount(count + 1);
+      await expect(groups.getByRole("link")).toHaveCount(1);
+      await expect(conversations.getByRole("link")).toHaveCount(count);
     }
   });
 }
 
 for (const locale of ["zh", "en"] as const) {
-  test(`${locale}: output panel hides empty sections and centers an icon when empty`, async ({
+  test(`${locale}: the files tab lists only the output sections that have content above the project's files`, async ({
     page,
   }) => {
     const { t } = createTranslator(locale);
@@ -2416,44 +2514,24 @@ for (const locale of ["zh", "en"] as const) {
     }, locale);
     const { messages } = await setup(page);
     const panel = page.getByTestId("team-side-panel");
-    const empty = panel.getByRole("img", {
-      name: t("team.noOutputs"),
+    const files = panel.getByRole("radio", {
+      name: t("panel.files"),
       exact: true,
     });
-    await expect(empty).toBeVisible();
-    await expect(panel.locator("section, h3")).toHaveCount(0);
+    const header = page.getByTestId("team-screen").locator("header").first();
+    await header
+      .getByRole("button", { name: t("team.files"), exact: true })
+      .first()
+      .click();
+    await expect(files).toBeChecked();
+    // Nothing produced yet: the project's files alone, and no placeholder for the rest.
+    await expect(panel.getByRole("heading", { level: 3 })).toHaveText([
+      t("panel.projectFiles"),
+    ]);
+    await expect(panel.locator("section")).toHaveCount(1);
     await expect(
-      panel.getByText(t("team.noOutputs"), { exact: true }),
+      panel.getByRole("img", { name: t("team.noOutputs") }),
     ).toHaveCount(0);
-    for (const theme of ["light", "dark"]) {
-      await page.evaluate(
-        (value) => (document.documentElement.dataset.theme = value),
-        theme,
-      );
-      for (const width of [1440, 720]) {
-        await page.setViewportSize({ width, height: 1000 });
-        if (width === 720)
-          await page
-            .getByRole("button", { name: t("team.showPanel"), exact: true })
-            .click();
-        await expect(panel).toBeVisible();
-        const area = panel.locator(":scope > div");
-        const areaBox = (await area.boundingBox())!;
-        const iconBox = (await empty.boundingBox())!;
-        expect(
-          Math.abs(
-            iconBox.x + iconBox.width / 2 - areaBox.x - areaBox.width / 2,
-          ),
-        ).toBeLessThan(1);
-        expect(
-          Math.abs(
-            iconBox.y + iconBox.height / 2 - areaBox.y - areaBox.height / 2,
-          ),
-        ).toBeLessThan(1);
-        await expect(empty).toHaveCSS("width", "32px");
-        await expect(empty).toHaveCSS("height", "32px");
-      }
-    }
     const base: TeamMessage = {
       id: "output",
       channel_id: channel,
@@ -2497,27 +2575,67 @@ for (const locale of ["zh", "en"] as const) {
         },
       ],
     ];
-    // At narrow widths the panel is a drawer over the header; check the rest wide.
-    await page.setViewportSize({ width: 1440, height: 1000 });
     for (const [key, message] of cases) {
       messages.splice(0, messages.length, message);
-      await expect(panel.getByRole("heading", { level: 3 })).toHaveText(
+      await expect(panel.getByRole("heading", { level: 3 })).toHaveText([
         t(`team.${key}`),
-      );
-      await expect(empty).toHaveCount(0);
+        t("panel.projectFiles"),
+      ]);
     }
-    await page
-      .getByTestId("team-screen")
-      .locator("header")
-      .getByRole("button", { name: t("team.files"), exact: true })
-      .first()
-      .click();
-    await expect(panel.getByRole("heading", { level: 3 })).toHaveText(
-      t("team.sources"),
-    );
     messages.splice(0);
-    await expect(empty).toBeVisible();
-    await expect(panel.locator("section, h3")).toHaveCount(0);
+    await expect(panel.getByRole("heading", { level: 3 })).toHaveText([
+      t("panel.projectFiles"),
+    ]);
+    await expect(panel.locator("section")).toHaveCount(1);
+  });
+}
+
+for (const theme of ["light", "dark"] as const) {
+  test(`${theme}: at narrow widths the right panel covers the conversation instead of squeezing it`, async ({
+    page,
+  }) => {
+    const { t } = createTranslator("zh");
+    await page.addInitScript((value) => {
+      localStorage.setItem("paper-appearance", value);
+      localStorage.removeItem("team-side-panel");
+    }, theme);
+    await setup(page);
+    await page.setViewportSize({ width: 720, height: 900 });
+    await page.reload();
+    const panel = page.getByTestId("team-side-panel");
+    const conversation = page.getByRole("region", {
+      name: "实验",
+      exact: true,
+    });
+    await expect(conversation).toBeVisible();
+    // Below 900px the panel starts closed.
+    await expect(panel).toHaveCount(0);
+    const before = (await conversation.boundingBox())!;
+    await page
+      .getByRole("button", { name: t("team.showPanel"), exact: true })
+      .click();
+    await expect(panel).toBeVisible();
+    const after = (await conversation.boundingBox())!;
+    const box = (await panel.boundingBox())!;
+    // The conversation keeps its width; the panel is a drawer over its right edge.
+    expect(after.width).toBe(before.width);
+    expect(box.x + box.width).toBeLessThanOrEqual(720);
+    expect(box.x).toBeGreaterThan(0);
+    await panel
+      .getByRole("button", { name: t("panel.expand"), exact: true })
+      .click();
+    // Expanded, it takes the whole width of the conversation.
+    const wide = (await panel.boundingBox())!;
+    expect(wide.width).toBeCloseTo(before.width, 0);
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= window.innerWidth,
+      ),
+    ).toBe(true);
+    await panel
+      .getByRole("button", { name: t("team.hidePanel"), exact: true })
+      .click();
+    await expect(panel).toHaveCount(0);
   });
 }
 
@@ -2666,11 +2784,15 @@ for (const [locale, width] of [
       if (await expand.isVisible()) await expand.click();
     };
     await openSidebar();
-    const activity = page.locator('[data-id="activity"]');
-    // The count sits beside the entry; the entry itself is wrapped by its tooltip.
-    const shortcut = activity.locator("xpath=ancestor::div[1]");
-    await expect(shortcut.getByText("1", { exact: true })).toBeVisible();
-    await activity.click();
+    // Activity is behind the project's menu; its unread count sits on the button.
+    const count = sidebar.getByLabel(t("team.unreadCount", { count: 1 }), {
+      exact: true,
+    });
+    await expect(count).toHaveText("1");
+    await sidebar.locator('[data-id="project-menu"]').click();
+    await page
+      .getByRole("menuitem", { name: t("team.activity"), exact: true })
+      .click();
     const event = page.locator('[data-activity-id="reminder-event"]');
     await expect(event).toHaveAttribute("data-unread", "true");
     await expect(event).toContainText("Original reminder excerpt");
@@ -2679,8 +2801,8 @@ for (const [locale, width] of [
     await expect(row).toBeFocused();
     await expect.poll(() => read).toBe(true);
     await openSidebar();
-    await expect(activity).toBeVisible();
-    await expect(shortcut.getByText("1", { exact: true })).toHaveCount(0);
+    await expect(sidebar.locator('[data-id="project-menu"]')).toBeVisible();
+    await expect(count).toHaveCount(0);
   });
 }
 
@@ -2766,6 +2888,7 @@ for (const [locale, theme, width] of [
     });
     await expect(panel.getByRole("tab")).toHaveText([
       t("research.record.progress"),
+      t("panel.files"),
       t("research.panel.changes"),
       t("research.record.runs"),
     ]);

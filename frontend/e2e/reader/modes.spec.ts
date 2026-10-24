@@ -328,7 +328,7 @@ test("without a model the translated view says to add one in settings", async ({
   await expect(layoutPanel(page).getByText("未配置模型")).toBeVisible();
   await expect(
     layoutPanel(page).getByRole("link", { name: "添加模型" }),
-  ).toHaveAttribute("href", "#customize/models");
+  ).toHaveAttribute("href", "#settings/models");
   // Nothing can be started without one.
   await expect(
     layoutPanel(page).getByRole("button", { name: "开始版面翻译" }),

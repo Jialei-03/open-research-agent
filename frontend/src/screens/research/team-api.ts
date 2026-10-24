@@ -429,6 +429,11 @@ export const saveLibraryMember = (
     },
     "PATCH",
   );
+export const draftTeamMember = (id: string, description: string) =>
+  send(`${base(id)}/members/draft`, { description }) as Promise<{
+    source: string;
+    config: MemberConfig;
+  }>;
 export const addTeamMember = (
   id: string,
   body: {

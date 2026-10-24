@@ -1,4 +1,5 @@
 import {
+  ArrowUp,
   ChevronDown,
   ChevronRight,
   FileCode,
@@ -24,6 +25,7 @@ import {
   refreshTeam,
   readTeamFile,
   saveTeamFile,
+  sendTeamMessage,
   teamFileHistory,
   type Team,
   type TeamFile,
@@ -605,7 +607,71 @@ function Watch({ team, message }: { team: Team; message?: TeamMessage }) {
           <Prose text={run.response || message.text} />
         </div>
       )}
+      {live && member && (
+        <ChimeIn team={team} message={message} member={member} />
+      )}
     </div>
+  );
+}
+
+/** A word to a colleague while they work: it lands where the work is, and they take it in now. */
+function ChimeIn({
+  team,
+  message,
+  member,
+}: {
+  team: Team;
+  message: TeamMessage;
+  member: TeamMember;
+}) {
+  const { t } = useI18n();
+  const [text, setText] = useState("");
+  const [sending, setSending] = useState(false);
+  const direct = team.channels.find(
+    (c) => c.id === message.channel_id,
+  )?.member_id;
+  const submit = async () => {
+    const said = text.trim();
+    if (!said || sending) return;
+    setSending(true);
+    try {
+      await sendTeamMessage(team.workspace_id, message.channel_id, {
+        text: direct ? said : `@${member.name || member.role} ${said}`,
+        ...(message.thread_id ? { thread_id: message.thread_id } : {}),
+        mode: "immediate",
+        client_id: crypto.randomUUID(),
+      });
+      setText("");
+      refreshTeam();
+    } catch (reason) {
+      toast.show({ message: String(reason), tone: "error" });
+    } finally {
+      setSending(false);
+    }
+  };
+  return (
+    <form
+      className={styles.chime}
+      onSubmit={(event) => {
+        event.preventDefault();
+        void submit();
+      }}
+    >
+      <input
+        value={text}
+        onChange={(event) => setText(event.target.value)}
+        placeholder={t("panel.chimeIn", { name: memberName(member, t) })}
+        aria-label={t("panel.chimeIn", { name: memberName(member, t) })}
+        disabled={sending}
+      />
+      <IconButton
+        type="submit"
+        size="sm"
+        icon={ArrowUp}
+        label={t("reader.assistant.send")}
+        disabled={!text.trim() || sending}
+      />
+    </form>
   );
 }
 

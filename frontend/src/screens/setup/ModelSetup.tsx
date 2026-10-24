@@ -6,7 +6,7 @@ export function openModelSetup() {
   const params = new URLSearchParams({
     returnTo: window.location.hash.slice(1) || "new",
   });
-  window.location.hash = `customize/models?${params}`;
+  window.location.hash = `settings/models?${params}`;
 }
 
 export function AddModelButton({ disabled = false }: { disabled?: boolean }) {

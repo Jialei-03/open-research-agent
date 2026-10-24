@@ -723,11 +723,14 @@ test("customize switches between the saved research playbook and real model sett
   await expect(
     page.getByText("固定数据和随机种子再比较", { exact: false }),
   ).toBeVisible();
-  await sidebar.locator('a[href="#customize/models"]').click();
-  await expect(page).toHaveURL(/#customize\/models$/);
-  await expect(page.getByText("模型1", { exact: true })).toBeVisible();
-  await expect(page.getByText("模型2", { exact: true })).toBeVisible();
-  await page
+  // Customize no longer lists the models: they are a connection, in the settings window.
+  await expect(sidebar.locator('a[href="#customize/models"]')).toHaveCount(0);
+  await page.goto("/#customize/models");
+  await expect(page).toHaveURL(/#settings\/models$/);
+  const settings = page.getByRole("dialog", { name: "设置", exact: true });
+  await expect(settings.getByText("模型1", { exact: true })).toBeVisible();
+  await expect(settings.getByText("模型2", { exact: true })).toBeVisible();
+  await settings
     .getByRole("button", { name: "模型2 的更多操作", exact: true })
     .click();
   await expect(
@@ -735,8 +738,9 @@ test("customize switches between the saved research playbook and real model sett
   ).toBeEnabled();
   await page.keyboard.press("Escape");
   await page.reload();
-  await expect(customize).toHaveAttribute("aria-current", "page");
-  await expect(page.getByText("模型1", { exact: true })).toBeVisible();
+  await expect(settings.getByText("模型1", { exact: true })).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(settings).toBeHidden();
   await sidebar.locator('a[href="#customize/playbook"]').click();
   await expect(
     page.getByRole("heading", { name: "研究手册", exact: true }),
@@ -1110,7 +1114,7 @@ for (const [locale, theme, width] of [
       else await send.click();
       await expect(page).toHaveURL(
         (url) =>
-          url.hash.startsWith("#customize/models?") &&
+          url.hash.startsWith("#settings/models?") &&
           new URLSearchParams(url.hash.split("?")[1]).get("returnTo") === hash,
       );
       await expect(dialog).toBeVisible();
@@ -1227,14 +1231,16 @@ test("new research keeps the workspace and classification of the open research",
 }) => {
   const state = await project(page);
   await page.goto(`/#${teamHash(wid, experiments, `research:${rid}`)}`);
-  const start = page
+  // The research section's "+" starts from the open research's project and classification.
+  await page
     .getByRole("navigation", { name: "侧栏" })
-    .getByRole("link", { name: "新研究", exact: true });
-  await expect(start).toHaveAttribute(
-    "href",
-    `#new?workspace=${wid}&collection=aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa`,
+    .getByRole("button", { name: "新研究", exact: true })
+    .click();
+  await expect(page).toHaveURL(
+    (url) =>
+      url.hash ===
+      `#new?workspace=${wid}&collection=aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa`,
   );
-  await start.click();
   const startPage = page.getByTestId("new-research");
   await expect(startPage.getByRole("heading", { level: 1 })).toHaveText(
     "想研究什么？",
@@ -1275,7 +1281,7 @@ test("a missing explicit workspace asks for a folder instead of silently changin
   expect(state.direct).toEqual([]);
 });
 
-test("a new user creates a project through the fixed switcher and empty list", async ({
+test("a new user creates a project through the rail's plus and the empty list", async ({
   page,
 }) => {
   const state = await project(page);
@@ -1285,8 +1291,18 @@ test("a new user creates a project through the fixed switcher and empty list", a
   await page.goto("/#new");
   await page.reload();
   const sidebar = page.getByRole("navigation", { name: "侧栏", exact: true });
-  for (const id of ["activity", "work", "members", "team-settings"])
+  for (const id of [
+    "inbox",
+    "board",
+    "research-new",
+    "project-menu",
+    "activity",
+    "work",
+    "members",
+    "team-settings",
+  ])
     await expect(sidebar.locator(`[data-id="${id}"]`)).toHaveCount(0);
+  await expect(sidebar.locator('[data-id="project"]')).toHaveCount(0);
   await sidebar.locator('[data-id="create-project"]').click();
   await expect(
     page.getByRole("dialog", { name: "新建项目", exact: true }),
@@ -1295,11 +1311,8 @@ test("a new user creates a project through the fixed switcher and empty list", a
     .getByRole("dialog", { name: "新建项目", exact: true })
     .getByRole("button", { name: "取消", exact: true })
     .click();
-  await sidebar.getByRole("button", { name: "切换项目", exact: true }).click();
-  await page
-    .getByRole("dialog", { name: "选择项目", exact: true })
-    .getByRole("button", { name: "新建项目", exact: true })
-    .click();
+  // The rail's "+" opens the same dialog.
+  await sidebar.locator('[data-id="add-project"]').click();
   const dialog = page.getByRole("dialog", { name: "新建项目", exact: true });
   await expect(dialog).toBeVisible();
   await expect(page).not.toHaveURL(/#workspaces/);
@@ -1343,7 +1356,10 @@ for (const kind of ["local", "ssh"] as const) {
       identity_file: "",
     });
     await page.goto("/#workspaces");
-    await page.getByRole("button", { name: "新建项目", exact: true }).click();
+    await page
+      .getByRole("main")
+      .getByRole("button", { name: "新建项目", exact: true })
+      .click();
     const dialog = page.getByRole("dialog", { name: "新建项目", exact: true });
     await dialog
       .getByRole("radio", { name: "选择已有文件夹", exact: true })
@@ -1553,7 +1569,10 @@ test("SSH connections validate before a remote folder can become a workspace", a
     .getByRole("button", { name: "关闭", exact: true })
     .last()
     .click();
-  await page.getByRole("button", { name: "新建项目", exact: true }).click();
+  await page
+    .getByRole("main")
+    .getByRole("button", { name: "新建项目", exact: true })
+    .click();
   const workspaceDialog = page.getByRole("dialog", {
     name: "新建项目",
     exact: true,
@@ -1616,11 +1635,14 @@ test("SSH connections validate before a remote folder can become a workspace", a
         exact: true,
       }),
   ).toHaveText("实验服务器");
+  // The new project heads the sidebar and its tile in the rail is the selected one.
+  const sidebar = page.getByRole("navigation", { name: "侧栏", exact: true });
   await expect(
-    page
-      .getByRole("navigation", { name: "侧栏", exact: true })
-      .getByRole("button", { name: "切换项目", exact: true }),
-  ).toHaveText("远端实验");
+    sidebar.getByRole("heading", { name: "远端实验", level: 2, exact: true }),
+  ).toBeVisible();
+  await expect(
+    sidebar.getByRole("link", { name: "远端实验", exact: true }),
+  ).toHaveAttribute("aria-current", "page");
   await expect(
     page
       .getByRole("main")
@@ -1674,7 +1696,7 @@ test("SSH connections validate before a remote folder can become a workspace", a
   ).toBeVisible();
   await expect(
     page.getByRole("complementary", { name: "研究记录" }).getByRole("tab"),
-  ).toHaveText(["进度", "变更", "实验"]);
+  ).toHaveText(["进度", "文件", "变更", "实验"]);
   await page.getByRole("button", { name: "收起研究记录", exact: true }).click();
   await page.goto("/#workspaces/bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb");
   await expect(
@@ -1843,16 +1865,16 @@ test("needs you opens pending conversations and sidebar entries expose real stat
   state.researches[0].status = "waiting";
   await page.reload();
   const sidebar = page.getByRole("navigation", { name: "侧栏", exact: true });
-  const conversations = sidebar.getByRole("group", {
-    name: "消息",
+  const colleagues = sidebar.getByRole("group", {
+    name: "私聊",
     exact: true,
   });
   await expect(
-    conversations.getByRole("link", { name: "advisor", exact: true }),
+    colleagues.getByRole("link", { name: "advisor", exact: true }),
   ).toBeVisible();
   // The status dot is on the member's card trigger beside the conversation link.
   await expect(
-    conversations
+    colleagues
       .getByRole("button", {
         name: createTranslator("zh").t("team.colleague.card", {
           name: "advisor",
@@ -1864,13 +1886,31 @@ test("needs you opens pending conversations and sidebar entries expose real stat
   await expect(
     sidebar.getByRole("button", { name: "通知", exact: true }),
   ).toHaveCount(0);
-  const attention = sidebar.getByRole("region", {
-    name: "需要你",
-    exact: true,
-  });
-  await expect(attention).toContainText(research.question);
-  await expect(attention).toContainText("等你决定");
-  await attention
+  // What waits is not a section of the sidebar: "Waiting on you" counts it, and its page lists it.
+  await expect(
+    sidebar.getByRole("region", { name: "需要你", exact: true }),
+  ).toHaveCount(0);
+  const waiting = sidebar.locator('[data-id="inbox"]');
+  await expect(waiting).toHaveText("待你决定");
+  await expect(
+    sidebar
+      .locator('[data-sidebar-place="research"]')
+      .getByLabel("1 件等你决定", { exact: true }),
+  ).toBeVisible();
+  await expect(
+    sidebar
+      .locator('[data-sidebar-place="rail"] [data-id="project"]')
+      .getByLabel("1 件等你决定", { exact: true }),
+  ).toBeVisible();
+  await waiting.click();
+  await expect(page).toHaveURL((url) => url.hash === `#inbox?workspace=${wid}`);
+  const inbox = page.getByTestId("inbox");
+  await expect(
+    inbox.getByRole("heading", { name: "待你决定", level: 1, exact: true }),
+  ).toBeVisible();
+  await expect(inbox).toContainText(research.question);
+  await expect(inbox).toContainText(workspace.name);
+  await inbox
     .getByRole("link", { name: new RegExp(research.question) })
     .click();
   await expect(page).toHaveURL(
@@ -1900,37 +1940,46 @@ test("team channels keep every research and derived conversation accessible as a
   }));
   await page.goto(`/#${teamHash(wid, experiments)}`);
   const sidebar = page.getByRole("navigation", { name: "侧栏" });
-  const conversations = sidebar.getByRole("group", {
-    name: "消息",
-    exact: true,
-  });
   await expect(
-    conversations.getByRole("link", { name: "实验", exact: true }),
+    sidebar
+      .getByRole("group", { name: "群聊", exact: true })
+      .getByRole("link", { name: "实验", exact: true }),
   ).toBeVisible();
   await expect(
-    conversations.getByRole("link", { name: "advisor", exact: true }),
+    sidebar
+      .getByRole("group", { name: "私聊", exact: true })
+      .getByRole("link", { name: "advisor", exact: true }),
+  ).toBeVisible();
+  // The project's name heads its sidebar; it is not a switcher.
+  await expect(
+    sidebar.getByRole("heading", { name: workspace.name, level: 2 }),
   ).toBeVisible();
   await expect(
     sidebar.getByRole("button", { name: "切换项目", exact: true }),
-  ).toHaveText(workspace.name);
+  ).toHaveCount(0);
   const channel = page.getByRole("region", { name: "实验", exact: true });
-  await expect(channel.getByRole("article")).toHaveCount(7);
-  await expect(
-    channel.getByRole("button", { name: "研究 0", exact: true }),
-  ).toBeVisible();
-  await channel.getByRole("button", { name: "研究 5", exact: true }).click();
-  const thread = page.getByRole("region", { name: "线程", exact: true });
-  await expect(
-    thread.getByRole("heading", { name: "研究 5", exact: true }),
-  ).toBeVisible();
-  await expect(page).toHaveURL(
-    (url) =>
-      url.hash ===
-      `#${teamHash(wid, experiments, `research:${state.researches[5].id}`)}`,
-  );
-  await thread.getByRole("button", { name: "关闭", exact: true }).click();
-  await expect(thread).toHaveCount(0);
-  await expect(channel.getByRole("article")).toHaveCount(7);
+  // The channel does not list the researches: the sidebar's research section does, every one.
+  await expect(channel.getByRole("article")).toHaveCount(0);
+  const rows = sidebar.locator('[data-id="research-row"]');
+  await expect(rows).toHaveCount(7);
+  // Each opens as a thread by its address (a derived one too), and the row is the current one.
+  for (const n of [0, 5]) {
+    await page.goto(
+      `/#${teamHash(wid, experiments, `research:${state.researches[n].id}`)}`,
+    );
+    const thread = page.getByRole("region", { name: "线程", exact: true });
+    await expect(
+      thread.getByRole("heading", { name: `研究 ${n}`, exact: true }),
+    ).toBeVisible();
+    await expect(rows.filter({ hasText: `研究 ${n}` })).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
+    await thread.getByRole("button", { name: "关闭", exact: true }).click();
+    await expect(thread).toHaveCount(0);
+    await expect(page).not.toHaveURL(/thread=/);
+    await expect(channel.getByRole("article")).toHaveCount(0);
+  }
   expect(state.direct).toEqual([]);
 });
 
@@ -1939,10 +1988,7 @@ test("team thread selection survives reload and remains accessible after visitin
 }) => {
   const state = await project(page);
   const sidebar = page.getByRole("navigation", { name: "侧栏" });
-  await page.goto(`/#${teamHash(wid, experiments)}`);
-  await page
-    .getByRole("button", { name: research.question, exact: true })
-    .click();
+  await page.goto(`/#${teamHash(wid, experiments, `research:${rid}`)}`);
   const thread = page.getByRole("region", { name: "线程", exact: true });
   await expect(
     thread.getByRole("heading", { name: research.question, exact: true }),
@@ -1955,7 +2001,10 @@ test("team thread selection survives reload and remains accessible after visitin
     sidebar.getByRole("link", { name: "实验", exact: true }),
   ).toHaveAttribute("aria-current", "page");
   await sidebar.getByRole("link", { name: "资料", exact: true }).click();
-  await sidebar.getByRole("link", { name: "研究", exact: true }).click();
+  // The project's tile returns to where its work was left, the open thread included.
+  await sidebar
+    .getByRole("link", { name: workspace.name, exact: true })
+    .click();
   await expect(page).toHaveURL(
     (url) => url.hash === `#${teamHash(wid, experiments, `research:${rid}`)}`,
   );
@@ -2223,7 +2272,7 @@ test("a finished research accepts a discussion and stops only its current answer
   ).toHaveCount(0);
   await expect(
     page.getByRole("complementary", { name: "研究记录" }).getByRole("tab"),
-  ).toHaveText(["进度", "变更", "实验"]);
+  ).toHaveText(["进度", "文件", "变更", "实验"]);
   await page.getByRole("button", { name: "收起研究记录", exact: true }).click();
   await input.fill("解释这个结论的适用条件");
   await page.getByRole("button", { name: "发送", exact: true }).click();
@@ -2949,7 +2998,12 @@ test("conversation turns open per-round review in an independent tabbed panel", 
   await viewChanges.focus();
   await page.keyboard.press("Enter");
   const panel = page.getByRole("complementary", { name: "研究记录" });
-  await expect(panel.getByRole("tab")).toHaveText(["进度", "变更", "实验"]);
+  await expect(panel.getByRole("tab")).toHaveText([
+    "进度",
+    "文件",
+    "变更",
+    "实验",
+  ]);
   await expect(
     panel.getByRole("tab", { name: "变更", exact: true }),
   ).toHaveAttribute("aria-selected", "true");

@@ -323,10 +323,11 @@ def test_team_message_features_virtual_messages_keep_reactions_and_sources(featu
         row["reactions"] == [{"emoji": "👍", "count": 1, "mine": True}]
         for row in history
     )
-    roots = features.client.get(
-        f"{features.base}/channels/{features.channels['experiments']}/messages"
-    ).json()["messages"]
-    assert roots[0]["reactions"][0]["emoji"] == "👍"
+    root = features.client.get(
+        f"{features.base}/channels/{features.channels['experiments']}/messages",
+        params={"thread_id": identifiers[2]},
+    ).json()["root"]
+    assert root["reactions"][0]["emoji"] == "👍"
     with features.maker() as d:
         advisor = d.get(TeamMember, features.members["advisor"])
         feedback = feedback_part(d, advisor)
