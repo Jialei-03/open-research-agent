@@ -37,7 +37,7 @@ export const PLACES = {
     "groups-more",
     "groups-less",
   ],
-  all: [],
+  all: ["all-project", "all-row"],
   dms: ["dms", "add-member", "dm", "dms-more", "dms-less"],
   materials: ["import", "all", "reading", "unread", "read", "discover"],
   recent: ["recent", "recent-paper", "recent-more", "recent-less"],

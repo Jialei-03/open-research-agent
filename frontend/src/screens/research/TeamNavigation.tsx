@@ -608,6 +608,7 @@ function AllConversations({ go }: { go(hash: string): void }) {
           <section key={w.id} aria-label={w.name}>
             <a
               className={nav.heading}
+              data-id={sidebarId("all-project")}
               href={`#${teamHash(w.id)}`}
               onClick={followLink(go, teamHash(w.id))}
             >
@@ -618,6 +619,7 @@ function AllConversations({ go }: { go(hash: string): void }) {
                 <a
                   key={row.key}
                   className={nav.allRow}
+                  data-id={sidebarId("all-row")}
                   href={`#${row.hash}`}
                   onClick={followLink(go, row.hash)}
                 >
