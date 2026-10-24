@@ -87,9 +87,11 @@ describe("team work projection view", () => {
       );
     it(`${locale} lays the work out as a board, review under way, each card linked`, () => {
       const html = render();
-      const lane = (key: string) =>
+      const lane = (key: "queued" | "working" | "waiting" | "done") =>
         html.indexOf(`aria-label="${t(`board.lane.${key}`)}"`);
-      const order = ["queued", "working", "waiting", "done"].map(lane);
+      const order = (["queued", "working", "waiting", "done"] as const).map(
+        lane,
+      );
       expect(order.every((index) => index >= 0)).toBe(true);
       expect([...order].sort((a, b) => a - b)).toEqual(order);
       const where = (group: string) => html.indexOf(`Topic ${group}`);
