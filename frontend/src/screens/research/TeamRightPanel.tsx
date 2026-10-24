@@ -21,6 +21,7 @@ import { MemberAvatar } from "../team/MemberEditor";
 import { memberName } from "../team/member-model";
 import {
   listTeamFiles,
+  refreshTeam,
   readTeamFile,
   saveTeamFile,
   teamFileHistory,
@@ -34,10 +35,16 @@ import {
 import { colleagueStatus } from "./TeamMemberCard";
 import { MemberStatus } from "./TeamNavigation";
 import { Prose } from "./talk/ThreadView";
+import { Trail } from "./process/Process";
+import { api } from "../../api";
+import type { MessageKey } from "../../i18n/i18n";
 import { threadDate } from "./team-model";
 import styles from "./TeamRightPanel.module.css";
 
-export type PanelTab = "duty" | "files" | "changes";
+export type PanelTab = "duty" | "files" | "changes" | "watch";
+
+/** Sent by a task card's "Watch": the right panel follows that run live. */
+export const WATCH_EVENT = "team-watch";
 
 /**
  * The right panel of a conversation, as coding tools keep theirs: who is on
@@ -49,6 +56,7 @@ export function TeamRightPanel({
   messages,
   tab,
   onTab,
+  watching = "",
   path,
   onPath,
   expanded,
@@ -56,11 +64,14 @@ export function TeamRightPanel({
   onClose,
   onMember,
   outputs,
+  member,
 }: {
   team: Team;
   messages: TeamMessage[];
   tab: PanelTab;
   onTab(tab: PanelTab): void;
+  /** The message whose run "Watch" follows. */
+  watching?: string;
   path: string;
   onPath(path: string): void;
   expanded: boolean;
@@ -69,6 +80,8 @@ export function TeamRightPanel({
   onMember(member: TeamMember): void;
   /** What this conversation produced: pins, deliverables, sources. */
   outputs: ReactNode;
+  /** In a direct message: whose desk the first tab shows. */
+  member?: TeamMember;
 }) {
   const { t } = useI18n();
   return (
@@ -85,9 +98,10 @@ export function TeamRightPanel({
           value={tab}
           onChange={(value) => onTab(value as PanelTab)}
           options={[
-            { value: "duty", label: t("panel.duty") },
+            { value: "duty", label: t(member ? "panel.desk" : "panel.duty") },
             { value: "files", label: t("panel.files") },
             { value: "changes", label: t("panel.changes") },
+            ...(watching ? [{ value: "watch", label: t("team.watch") }] : []),
           ]}
         />
         <span className={styles.grow} />
@@ -105,7 +119,19 @@ export function TeamRightPanel({
         />
       </header>
       <div className={styles.body}>
-        {tab === "duty" && <Duty team={team} onMember={onMember} />}
+        {tab === "duty" &&
+          (member ? (
+            <Desk
+              member={member}
+              messages={messages}
+              onPath={(path) => {
+                onPath(path);
+                onTab("files");
+              }}
+            />
+          ) : (
+            <Duty team={team} onMember={onMember} />
+          ))}
         {tab === "files" && (
           <Files
             workspace={team.workspace_id}
@@ -114,6 +140,12 @@ export function TeamRightPanel({
             onPath={onPath}
             expanded={expanded}
             outputs={outputs}
+          />
+        )}
+        {tab === "watch" && (
+          <Watch
+            team={team}
+            message={messages.find((m) => m.id === watching)}
           />
         )}
         {tab === "changes" && (
@@ -524,5 +556,152 @@ function Changes({
         </li>
       ))}
     </ul>
+  );
+}
+
+/** Over a colleague's shoulder: the live steps of one run, its answer as it comes, and a way to stop it. */
+function Watch({ team, message }: { team: Team; message?: TeamMessage }) {
+  const { t } = useI18n();
+  const run = message?.run;
+  if (!message || !run)
+    return <p className={styles.unsupported}>{t("panel.watchGone")}</p>;
+  const member = team.members.find((m) => m.id === message.author_id);
+  const live = run.status === "running" || run.status === "queued";
+  return (
+    <div className={styles.watch}>
+      <div className={styles.watchHead}>
+        {member && <MemberAvatar member={member} size="sm" />}
+        <span className={styles.deskName}>
+          {member ? memberName(member, t) : ""}
+        </span>
+        <span
+          className={styles.deskState}
+          data-state={live ? "working" : "idle"}
+        >
+          {t(`team.task.${run.status}` as MessageKey) || run.status}
+        </span>
+        <span className={styles.grow} />
+        {live && (
+          <Button
+            size="sm"
+            variant="secondary"
+            onClick={() =>
+              void api(`/agent/runs/${encodeURIComponent(run.id)}/cancel`, {
+                method: "POST",
+              })
+                .then(refreshTeam)
+                .catch((e: unknown) =>
+                  toast.show({ message: String(e), tone: "error" }),
+                )
+            }
+          >
+            {t("research.stop")}
+          </Button>
+        )}
+      </div>
+      <Trail steps={run.steps} live={live} />
+      {(run.response || message.text) && (
+        <div className={styles.watchAnswer}>
+          <Prose text={run.response || message.text} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** A colleague's desk, in their direct message: what they do now, what they were given, what they made. */
+function Desk({
+  member,
+  messages,
+  onPath,
+}: {
+  member: TeamMember;
+  messages: TeamMessage[];
+  onPath(path: string): void;
+}) {
+  const { t, tn, locale } = useI18n();
+  const tasks = messages
+    .filter((m) => m.author_id === member.id && m.run)
+    .slice(-8)
+    .reverse();
+  const live = tasks.find(
+    (m) => m.run!.status === "running" || m.run!.status === "queued",
+  );
+  const files = [
+    ...new Map(
+      tasks.flatMap((m) => m.data.files || []).map((file) => [file.path, file]),
+    ).values(),
+  ].slice(0, 6);
+  return (
+    <div className={styles.duty}>
+      <div className={styles.watchHead}>
+        <span className={styles.avatar}>
+          <MemberAvatar member={member} />
+          <MemberStatus
+            status={member.status}
+            enabled={member.enabled}
+            paused={member.paused}
+          />
+        </span>
+        <span className={styles.deskText}>
+          <span className={styles.deskName}>{memberName(member, t)}</span>
+          <span
+            className={styles.deskState}
+            data-state={live ? "working" : "idle"}
+          >
+            {colleagueStatus(member, { t, tn })}
+          </span>
+        </span>
+      </div>
+      {live && (
+        <Button
+          size="sm"
+          variant="secondary"
+          onClick={() =>
+            window.dispatchEvent(
+              new CustomEvent(WATCH_EVENT, { detail: live.id }),
+            )
+          }
+        >
+          {t("team.watch")}
+        </Button>
+      )}
+      {!!tasks.length && (
+        <section aria-label={t("panel.tasks")}>
+          <h3>{t("panel.tasks")}</h3>
+          {tasks.map((task) => (
+            <div key={task.id} className={styles.taskRow}>
+              <span className={styles.taskChip} data-state={task.run!.status}>
+                {t(`team.task.${task.run!.status}` as MessageKey) ||
+                  task.run!.status}
+              </span>
+              <span className={styles.treeName}>
+                {(task.preview || task.text || "").split("\n")[0] ||
+                  t("team.noContent")}
+              </span>
+              <time className={styles.taskWhen}>
+                {threadDate(task.created_at, locale, new Date(), "relative")}
+              </time>
+            </div>
+          ))}
+        </section>
+      )}
+      {!!files.length && (
+        <section aria-label={t("panel.recentFiles")}>
+          <h3>{t("panel.recentFiles")}</h3>
+          {files.map((file) => (
+            <button
+              key={file.path}
+              type="button"
+              className={styles.treeRow}
+              onClick={() => onPath(file.path)}
+            >
+              <FileText size={14} aria-hidden />
+              <span className={styles.treeName}>{file.name}</span>
+            </button>
+          ))}
+        </section>
+      )}
+    </div>
   );
 }

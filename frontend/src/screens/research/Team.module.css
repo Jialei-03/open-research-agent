@@ -719,3 +719,51 @@
     max-width: 100%;
   }
 }
+
+/* A member's reply to work they were given: where it stands, how long, a way to watch. */
+.taskHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--ui-space-8);
+  margin-bottom: var(--ui-space-8);
+}
+
+.taskState {
+  display: inline-flex;
+  align-items: center;
+  height: 22px;
+  padding: 0 var(--ui-space-8);
+  border-radius: var(--ui-r-pill);
+  background: var(--ui-fill);
+  color: var(--ui-fg-1);
+  font-size: var(--ui-text-12);
+}
+
+.taskState[data-state="running"],
+.taskState[data-state="queued"] {
+  background: color-mix(in oklab, var(--ui-info-text) 14%, transparent);
+  color: var(--ui-info-text);
+}
+
+.taskState[data-state="completed"] {
+  background: color-mix(in oklab, var(--ui-success-text) 14%, transparent);
+  color: var(--ui-success-text);
+}
+
+.taskState[data-state="failed"] {
+  background: color-mix(in oklab, var(--ui-danger-text) 12%, transparent);
+  color: var(--ui-danger-text);
+}
+
+.taskTime,
+.taskDone {
+  color: var(--ui-fg-3);
+  font-size: var(--ui-text-12);
+}
+
+/* A reply that is a task is a card, as in the design: white, with a hairline, not a grey bubble. */
+.bubble:has(.taskHead) {
+  background: var(--ui-elev);
+  box-shadow: var(--ui-elev-1);
+}

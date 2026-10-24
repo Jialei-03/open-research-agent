@@ -309,3 +309,63 @@
   font-family: var(--ui-font-mono);
   font-size: var(--ui-text-12);
 }
+
+.watch {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ui-space-12);
+  padding: var(--ui-space-8) var(--ui-space-12) var(--ui-space-16);
+}
+
+.watchHead {
+  display: flex;
+  align-items: center;
+  gap: var(--ui-space-8);
+}
+
+.watchAnswer {
+  padding-top: var(--ui-space-8);
+  border-top: 1px solid var(--ui-edge-subtle);
+}
+
+.taskRow {
+  display: flex;
+  align-items: center;
+  gap: var(--ui-space-8);
+  min-height: 30px;
+  padding: 0 var(--ui-space-4);
+  font-size: var(--ui-text-13);
+  color: var(--ui-fg-1);
+}
+
+.taskChip {
+  flex: none;
+  padding: 0 var(--ui-space-6);
+  border-radius: var(--ui-r-pill);
+  background: var(--ui-fill);
+  color: var(--ui-fg-2);
+  font-size: var(--ui-text-11);
+  line-height: 18px;
+}
+
+.taskChip[data-state="running"],
+.taskChip[data-state="queued"] {
+  background: color-mix(in oklab, var(--ui-info-text) 14%, transparent);
+  color: var(--ui-info-text);
+}
+
+.taskChip[data-state="completed"] {
+  background: color-mix(in oklab, var(--ui-success-text) 14%, transparent);
+  color: var(--ui-success-text);
+}
+
+.taskChip[data-state="failed"] {
+  background: color-mix(in oklab, var(--ui-danger-text) 12%, transparent);
+  color: var(--ui-danger-text);
+}
+
+.taskWhen {
+  flex: none;
+  color: var(--ui-fg-3);
+  font-size: var(--ui-text-12);
+}

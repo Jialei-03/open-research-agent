@@ -15,6 +15,7 @@ import {
   ClipboardList,
   ChevronDown,
   Copy,
+  Eye,
   GitFork,
   FileText,
   Forward,
@@ -55,9 +56,10 @@ import { AddModelButton, openModelSetup } from "../setup/ModelSetup";
 import { ModelPicker } from "./talk/Pickers";
 import { Prose } from "./talk/ThreadView";
 import { RunTurn, SummaryLine, Trail } from "./process/Process";
+import { shortDuration } from "./process/model";
 import { summary } from "./process/model";
 import { ResearchProject } from "./ResearchProject";
-import { TeamRightPanel, type PanelTab } from "./TeamRightPanel";
+import { TeamRightPanel, WATCH_EVENT, type PanelTab } from "./TeamRightPanel";
 import { TeamInbox } from "./TeamActivity";
 import { TeamWorkScreen } from "./TeamWork";
 import { TeamMemberCard, ColleagueStatus } from "./TeamMemberCard";
@@ -150,6 +152,7 @@ export function TeamScreen({
   const [fileRequest, setFileRequest] = useState(0);
   const [panelTab, setPanelTab] = useState<PanelTab>("duty");
   const [panelExpanded, setPanelExpanded] = useState(false);
+  const [watching, setWatching] = useState("");
   const [locateMessage, setLocateMessage] = useState("");
   const [locateRequest, setLocateRequest] = useState(0);
   const [conversation, setConversation] = useState<{
@@ -248,6 +251,15 @@ export function TeamScreen({
     [channel?.id],
   );
   const panelVisible = panelOpen && !!channel && !threadId;
+  useEffect(() => {
+    const watch = (event: Event) => {
+      setWatching((event as CustomEvent<string>).detail);
+      setPanelTab("watch");
+      togglePanel(true);
+    };
+    window.addEventListener(WATCH_EVENT, watch);
+    return () => window.removeEventListener(WATCH_EVENT, watch);
+  });
   // A file opens in the right panel's files tab, as coding tools open theirs.
   const openFile = (path: string) => {
     setFile(path);
@@ -477,6 +489,12 @@ export function TeamScreen({
           }
           tab={panelTab}
           onTab={setPanelTab}
+          watching={watching}
+          member={
+            channel.member_id
+              ? team.members.find((m) => m.id === channel.member_id)
+              : undefined
+          }
           path={file}
           onPath={setFile}
           expanded={panelExpanded}
@@ -1074,6 +1092,37 @@ function MessageRun({
         ? t("team.noAnswer")
         : run.error;
   const final = message.text === run.error ? "" : message.text;
+  const seconds =
+    run.runtime?.execution_seconds ??
+    Math.max(
+      0,
+      ((run.status === "running" ? Date.now() : Date.parse(run.updated_at)) -
+        Date.parse(run.created_at)) /
+        1000,
+    );
+  // The task card's head: where the work stands, how long it has taken, and a way to look or stop.
+  const head = (
+    <div className={styles.taskHead}>
+      <span className={styles.taskState} data-state={run.status}>
+        {t(`team.task.${run.status}` as MessageKey) || run.status}
+      </span>
+      <span className={styles.taskTime}>{shortDuration(seconds, t)}</span>
+      {run.status === "running" && (
+        <Button
+          size="sm"
+          variant="secondary"
+          icon={Eye}
+          onClick={() =>
+            window.dispatchEvent(
+              new CustomEvent(WATCH_EVENT, { detail: message.id }),
+            )
+          }
+        >
+          {t("team.watch")}
+        </Button>
+      )}
+    </div>
+  );
   // Reuse the process summary and trail, keeping the answer outside the fold.
   if (run.steps.length)
     return (
@@ -1081,6 +1130,7 @@ function MessageRun({
         className={styles.run}
         data-live={run.status === "running" || undefined}
       >
+        {head}
         {run.status === "running" ? (
           <Button
             variant="ghost"
@@ -1112,13 +1162,16 @@ function MessageRun({
       </section>
     );
   return (
-    <RunTurn
-      hideAuthor
-      run={{ ...run, error, role: member?.role || "advisor" }}
-      role={member?.role || "advisor"}
-      title={name}
-      final={final}
-    />
+    <>
+      {head}
+      <RunTurn
+        hideAuthor
+        run={{ ...run, error, role: member?.role || "advisor" }}
+        role={member?.role || "advisor"}
+        title={name}
+        final={final}
+      />
+    </>
   );
 }
 
