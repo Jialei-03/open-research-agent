@@ -317,6 +317,10 @@ export interface SeriesPoint {
 export const jobSeries = (projectId: string, jobId: string) =>
   api<SeriesPoint[]>(`${BASE}/${projectId}/jobs/${jobId}/series`);
 
+/** Stops one experiment; the research goes on. */
+export const stopJob = (projectId: string, jobId: string) =>
+  send(`${BASE}/${projectId}/jobs/${jobId}/stop`, {}) as Promise<ResearchJob>;
+
 export interface Compute {
   /** Whether experiments can be sent there now (client-side, from its state). */
   ready?: boolean;

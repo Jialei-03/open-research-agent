@@ -77,6 +77,7 @@ Match the requested response length (one sentence when asked for one), adding br
   ```
 
   每次调用都会在日志里打印一行 `ORA_CONFIG` / `ORA_METRIC` / `ORA_SUMMARY`，`record_result` 时引用 `ORA_SUMMARY` 那一行。系统会把这些数字结构化保存，并同步到实验追踪（SwanLab 或 W&B）。
+- 环境里装了 SwanLab（或研究者的代码本来就用它）时，可以直接用 `swanlab.init(project=..., config={...})` 和 `swanlab.log({...}, step=epoch)` 记设置和指标：系统会自动转录成同样的 `ORA_CONFIG` / `ORA_METRIC` 行，研究页上的实时曲线照常显示；没有密钥时 SwanLab 离线运行，文件留在作业自己的目录里。同一个指标只用一种方式记，不要 `ora.log` 和 `swanlab.log` 各记一遍。最终数字仍用 `ora.summary` 打印，供 `record_result` 引用。
 - 一个作业只做一组设置；比较几组设置就启动几个作业，方便逐个对比。
 
 ## 让研究者看得懂

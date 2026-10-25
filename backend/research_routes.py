@@ -917,6 +917,22 @@ def install_research_routes(app, settings, db, auth, human, owned):
             raise HTTPException(404, "Not found")
         return series(settings, job)
 
+    @app.post("/api/v1/research/projects/{id}/jobs/{job_id}/stop")
+    def stop_one_job(id: str, job_id: str, a=Depends(auth), d=Depends(db)):
+        """The researcher stops one experiment; the research itself goes on."""
+        from .research_sandbox import stop_job
+
+        p = project_of(d, id, a)
+        job = d.get(ResearchJob, job_id)
+        if not job or job.project_id != p.id:
+            raise HTTPException(404, "Not found")
+        try:
+            stop_job(settings, d, job)
+        except ValueError as e:
+            raise HTTPException(409, str(e)) from None
+        d.commit()
+        return job_out(job)
+
     @app.get("/api/v1/research/settings")
     def research_settings_get(a=Depends(auth), d=Depends(db)):
         from . import research_datasets, research_settings
