@@ -372,6 +372,11 @@ def test_a_direct_message_is_the_researcher_and_one_colleague(world):
         d.commit()
         texts = [m["text"] for m in team.history(d, workspace, channel)["messages"]]
     assert "from reviewer" not in texts and "answer to reviewer" not in texts
+    # Nor in the conversation list's preview.
+    preview = next(
+        c for c in a.get(base).json()["channels"] if c["id"] == dm
+    )["last_message"]
+    assert preview is None or "reviewer" not in preview["text"]
     send(world, "你好", channel=dm)
     shown = a.get(base + f"/channels/{dm}/messages").json()["messages"]
     assert shown[0]["text"] == "你好"

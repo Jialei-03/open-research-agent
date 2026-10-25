@@ -631,6 +631,18 @@ def research_root(project, channel, d):
     )
 
 
+def direct_message(message, member_id, human):
+    """In a direct message, only the researcher and that colleague talking.
+    Colleagues reaching each other there (and the replies they woke) belong to
+    the colleague's other conversations."""
+    if message.author_id is None or message.author_id == human:
+        return True
+    return message.author_id == member_id and message.data.get("woken_by") in (
+        None,
+        human,
+    )
+
+
 def history(d, workspace, channel, thread_id=None):
     from .team_message_features import reactions
 
@@ -640,17 +652,7 @@ def history(d, workspace, channel, thread_id=None):
     human = stable(workspace, "human")
 
     def between_us(m):
-        """In a direct message: only the researcher and that colleague talking.
-        Colleagues reaching each other there (and the replies they woke) belong
-        to the colleague's other conversations."""
-        if not flat or m.author_id is None:
-            return True
-        if m.author_id == human:
-            return True
-        return m.author_id == channel.member_id and m.data.get("woken_by") in (
-            None,
-            human,
-        )
+        return not flat or direct_message(m, channel.member_id, human)
 
     rows = [
         {**message_out(d, m), **({"thread_id": None, "replies": 0} if flat else {})}
@@ -1017,6 +1019,22 @@ def overview(d, workspace, *, include_reminders=True):
         if include_reminders or m.kind != "reminder"
     ]
     human = stable(workspace, "human")
+    # Direct messages count and preview only the researcher and that colleague.
+    owners = {
+        c.id: c.member_id
+        for c in d.scalars(
+            select(TeamChannel).where(
+                TeamChannel.workspace_id == workspace.id,
+                TeamChannel.member_id.is_not(None),
+            )
+        )
+    }
+    messages = [
+        m
+        for m in messages
+        if m.channel_id not in owners
+        or direct_message(m, owners[m.channel_id], human)
+    ]
     participating = {m.thread_id or m.id for m in messages if m.author_id == human}
     thread_roots = participating | {m.thread_id for m in messages if m.thread_id}
     unread_messages = [
