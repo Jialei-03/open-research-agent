@@ -332,3 +332,48 @@ def test_a_colleagues_conversations_list_where_they_work(world):
         "running",
         "completed",
     }
+
+
+def test_a_direct_message_is_the_researcher_and_one_colleague(world):
+    from backend import research_team as team
+    from backend import research_team_tools
+    from backend.models import ResearchWorkspace
+
+    app, a, _, _, owner, _, wid, base, overview = world
+    reviewer = a.post(base + "/members/join", json={"key": "reviewer"}).json()["id"]
+    executor = a.post(base + "/members/join", json={"key": "executor"}).json()["id"]
+    channels = a.get(base).json()["channels"]
+    dm = next(c["id"] for c in channels if c["member_id"] == executor)
+    general = next(c["id"] for c in channels if c["key"] == "general")
+    info = {"workspace_id": wid, "member_id": reviewer, "channel_id": general}
+    # Another colleague cannot write into it...
+    with pytest.raises(ValueError):
+        research_team_tools._call(
+            app, owner, info, "team_send_message",
+            {"channel_id": dm, "text": "@执行者 check this", "to": ["执行者"]},
+        )
+    # ...and what got there before (and the replies it woke) is not shown in it.
+    with app.state.maker() as d:
+        workspace = d.get(ResearchWorkspace, wid)
+        channel = team.channel_of(d, workspace, dm)
+        d.add(
+            TeamMessage(
+                workspace_id=wid, channel_id=dm, author_id=reviewer,
+                text="from reviewer", kind="text", mentions=[], data={},
+            )
+        )
+        d.add(
+            TeamMessage(
+                workspace_id=wid, channel_id=dm, author_id=executor,
+                text="answer to reviewer", kind="text", mentions=[],
+                data={"woken_by": reviewer},
+            )
+        )
+        d.commit()
+        texts = [m["text"] for m in team.history(d, workspace, channel)["messages"]]
+    assert "from reviewer" not in texts and "answer to reviewer" not in texts
+    send(world, "你好", channel=dm)
+    shown = a.get(base + f"/channels/{dm}/messages").json()["messages"]
+    assert shown[0]["text"] == "你好"
+    # Everything else here is the colleague answering the researcher.
+    assert {m["author_id"] for m in shown[1:]} <= {executor}

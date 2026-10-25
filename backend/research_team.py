@@ -637,6 +637,21 @@ def history(d, workspace, channel, thread_id=None):
     root = root_of(d, workspace, channel, thread_id)
     # A direct message has no threads; older replies there read in order.
     flat = bool(channel.member_id) and not thread_id
+    human = stable(workspace, "human")
+
+    def between_us(m):
+        """In a direct message: only the researcher and that colleague talking.
+        Colleagues reaching each other there (and the replies they woke) belong
+        to the colleague's other conversations."""
+        if not flat or m.author_id is None:
+            return True
+        if m.author_id == human:
+            return True
+        return m.author_id == channel.member_id and m.data.get("woken_by") in (
+            None,
+            human,
+        )
+
     rows = [
         {**message_out(d, m), **({"thread_id": None, "replies": 0} if flat else {})}
         for m in d.scalars(
@@ -648,6 +663,7 @@ def history(d, workspace, channel, thread_id=None):
             )
             .order_by(TeamMessage.created_at, TeamMessage.id)
         )
+        if between_us(m)
     ]
     if not thread_id and channel.key == "dm:advisor":
         sessions = select(AgentSession.id).where(

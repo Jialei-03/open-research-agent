@@ -17,6 +17,7 @@ import {
   type ReactNode,
 } from "react";
 import { useI18n } from "../../i18n/I18nProvider";
+import { followLink } from "../../reader/route";
 import { Button, IconButton, SegmentedControl, toast } from "../../ui";
 import { MemberAvatar } from "../team/MemberEditor";
 import { memberName } from "../team/member-model";
@@ -69,6 +70,7 @@ export function TeamRightPanel({
   onExpand,
   onClose,
   onMember,
+  go,
   outputs,
   member,
 }: {
@@ -84,6 +86,7 @@ export function TeamRightPanel({
   onExpand(expanded: boolean): void;
   onClose(): void;
   onMember(member: TeamMember): void;
+  go(hash: string): void;
   /** What this conversation produced: pins, deliverables, sources. */
   outputs: ReactNode;
   /** In a direct message: whose desk the first tab shows. */
@@ -128,6 +131,7 @@ export function TeamRightPanel({
         {tab === "duty" &&
           (member ? (
             <Desk
+              go={go}
               workspace={team.workspace_id}
               member={member}
               messages={messages}
@@ -711,11 +715,13 @@ function ChimeIn({
 
 /** A colleague's desk, in their direct message: what they do now, what they were given, what they made. */
 function Desk({
+  go,
   workspace,
   member,
   messages,
   onPath,
 }: {
+  go(hash: string): void;
   workspace: string;
   member: TeamMember;
   messages: TeamMessage[];
@@ -792,6 +798,10 @@ function Desk({
               key={`${place.channel_id}:${place.thread_id || ""}`}
               className={styles.taskRow}
               href={`#${teamHash(workspace, place.channel_id, place.thread_id || "")}`}
+              onClick={followLink(
+                go,
+                teamHash(workspace, place.channel_id, place.thread_id || ""),
+              )}
             >
               <span className={styles.taskChip} data-state={place.status}>
                 {t(`team.task.${place.status}` as MessageKey) || place.status}
@@ -808,7 +818,17 @@ function Desk({
         <section aria-label={t("panel.tasks")}>
           <h3>{t("panel.tasks")}</h3>
           {tasks.map((task) => (
-            <div key={task.id} className={styles.taskRow}>
+            <button
+              key={task.id}
+              type="button"
+              className={styles.taskRow}
+              // A task opens as the watch panel: its whole trail and result.
+              onClick={() =>
+                window.dispatchEvent(
+                  new CustomEvent(WATCH_EVENT, { detail: task.id }),
+                )
+              }
+            >
               <span className={styles.taskChip} data-state={task.run!.status}>
                 {t(`team.task.${task.run!.status}` as MessageKey) ||
                   task.run!.status}
@@ -820,7 +840,7 @@ function Desk({
               <time className={styles.taskWhen}>
                 {threadDate(task.created_at, locale, new Date(), "relative")}
               </time>
-            </div>
+            </button>
           ))}
         </section>
       )}

@@ -285,6 +285,16 @@ def _call(app, owner, info, name, args):
             d.commit()
             return {"message_id": message.id}
         if name in {"team_send_message", "team_wait_for_owner"}:
+            # A direct message is the researcher's and one colleague's alone.
+            if channel.member_id and channel.member_id != member.id:
+                owner_dm = d.get(TeamMember, channel.member_id)
+                raise ValueError(
+                    "这是研究者和"
+                    + (owner_dm.name if owner_dm else "这位同事")
+                    + "的私聊，不能在这里发消息；要找他，请在群聊里 @ 他 / "
+                    "This is the researcher's direct message with that colleague: "
+                    "reach them by naming them in a group channel instead."
+                )
             thread_id = (
                 thread_id
                 if "thread_id" in args

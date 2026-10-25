@@ -407,12 +407,23 @@
   }
 }
 
+a.taskRow,
+button.taskRow {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
 a.taskRow {
   border-radius: var(--ui-r-8);
   color: inherit;
   text-decoration: none;
 }
 
-a.taskRow:hover {
+a.taskRow:hover,
+button.taskRow:hover {
   background: var(--ui-hover);
 }

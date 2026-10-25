@@ -526,6 +526,7 @@ export function TeamScreen({
           expanded={panelExpanded}
           onExpand={setPanelExpanded}
           onClose={() => togglePanel(false)}
+          go={go}
           onMember={(member) => {
             // A colleague at work: watch the work. Otherwise talk to them.
             if (member.status === "working" || member.status === "queued") {
