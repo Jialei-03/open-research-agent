@@ -1395,6 +1395,39 @@ for (const kind of ["local", "ssh"] as const) {
   });
 }
 
+test("with no project yet, the first question makes one named after it and starts there", async ({
+  page,
+}) => {
+  const state = await project(page);
+  state.workspaces = [];
+  state.researches = [];
+  await page.goto("/#all");
+  await page.reload();
+  // Nothing to oversee yet: All projects is the start screen.
+  const start = page.getByTestId("new-research");
+  await expect(start).toBeVisible();
+  const box = start.getByRole("textbox", { name: "开始研究" });
+  const sendButton = start.getByRole("button", { name: "发送", exact: true });
+  await expect(sendButton).toBeDisabled();
+  await box.fill("Adam 和 SGD 在 MNIST 上谁更好？");
+  await expect(sendButton).toBeEnabled();
+  await sendButton.click();
+  await expect(page.getByTestId("new-research")).toHaveCount(0);
+  expect(state.workspaceRequests).toEqual([
+    {
+      name: "Adam 和 SGD 在 MNIST 上谁更好",
+      create_folder: true,
+      location: { kind: "local", path: "/home/leslie/ORA", connection_id: "" },
+    },
+  ]);
+  expect(state.direct).toEqual([
+    expect.objectContaining({
+      message: "Adam 和 SGD 在 MNIST 上谁更好？",
+      workspace_id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+    }),
+  ]);
+});
+
 test("workspace chooser creates a new folder without an empty research", async ({
   page,
 }) => {

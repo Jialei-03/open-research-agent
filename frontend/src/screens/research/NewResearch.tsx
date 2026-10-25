@@ -5,7 +5,11 @@ import { useI18n } from "../../i18n/I18nProvider";
 import { Button, IconButton, toast } from "../../ui";
 import { readModels, type ModelRow } from "../setup/model-api";
 import { useModelRevision } from "../setup/useModelRevision";
-import { refreshResearchNavigation } from "./navigation-api";
+import {
+  browseFolders,
+  createPhysicalWorkspace,
+  refreshResearchNavigation,
+} from "./navigation-api";
 import { useResearchNavigation } from "./ResearchNavigation";
 import { getTeam, teamHash } from "./team-api";
 import { resumeProject, startProject } from "./research-api";
@@ -113,6 +117,7 @@ export function NewResearch({
           workspaceId={current?.id || ""}
           collectionId={collection || null}
           defaultModelId={current?.model_config_id || ""}
+          autoProject={ready && !data.workspaces.some((item) => !item.archived)}
           go={go}
           context={
             <>
@@ -145,8 +150,11 @@ function FirstMessage({
   go,
   context,
   defaultModelId,
+  autoProject,
 }: {
   defaultModelId: string;
+  /** With no project yet, the first question makes one in the default folder. */
+  autoProject: boolean;
   context: ReactNode;
   draftKey: string;
   legacyDraftKey: string;
@@ -234,11 +242,17 @@ function FirstMessage({
     }
   }, [draftKey, modelId]);
   const send = async () => {
-    if (!workspaceId || !modelId || !text.trim() || busy) return;
+    if ((!workspaceId && !autoProject) || !modelId || !text.trim() || busy)
+      return;
     setBusy(true);
     setError("");
     let createdId = "";
+    let target = workspaceId;
     try {
+      if (!target) {
+        target = (await firstProject(text, t("workspace.untitled"))).id;
+        refreshResearchNavigation();
+      }
       const research = await startProject({
         message:
           text.trim() +
@@ -246,7 +260,7 @@ function FirstMessage({
             ? "\n" + files.map((file) => mention(file.name)).join(" ")
             : ""),
         workflow_id: workflowId,
-        workspace_id: workspaceId,
+        workspace_id: target,
         collection_id: collectionId,
         model_config_id: modelId,
         ...(files.length ? { defer_start: true } : {}),
@@ -264,11 +278,11 @@ function FirstMessage({
         /* Optional cache. */
       }
       refreshResearchNavigation();
-      const team = await getTeam(workspaceId);
+      const team = await getTeam(target);
       const channel = team.channels.find((c) => c.key === "experiments");
       go(
         channel
-          ? teamHash(workspaceId, channel.id, `research:${research.id}`)
+          ? teamHash(target, channel.id, `research:${research.id}`)
           : `research/${research.id}`,
       );
     } catch (reason) {
@@ -319,7 +333,7 @@ function FirstMessage({
         sendLabel={t("research.home.send")}
         busy={busy}
         disabled={busy}
-        sendDisabled={!workspaceId || !modelId}
+        sendDisabled={(!workspaceId && !autoProject) || !modelId}
         needsModel={modelKnown && models.length === 0}
         leading={
           <>
@@ -359,4 +373,28 @@ function FirstMessage({
       )}
     </div>
   );
+}
+
+/** A project named after the first question, in the default folder for new projects. */
+async function firstProject(question: string, untitled: string) {
+  const { path } = await browseFolders("local", "");
+  const base =
+    question
+      .split("\n")[0]
+      .replace(/[/\\\0\r:*?"<>|]/g, " ")
+      .replace(/\s+/g, " ")
+      .trim()
+      .slice(0, 24)
+      .replace(/[\s.,!?\u3002\uff0c\uff01\uff1f]+$/, "") || untitled;
+  for (let attempt = 1; ; attempt++) {
+    try {
+      return await createPhysicalWorkspace(
+        attempt === 1 ? base : `${base} ${attempt}`,
+        { kind: "local", path, connection_id: "" },
+        true,
+      );
+    } catch (reason) {
+      if (attempt >= 5) throw reason;
+    }
+  }
 }

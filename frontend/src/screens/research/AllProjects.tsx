@@ -3,6 +3,7 @@ import { followLink } from "../../reader/route";
 import { MemberAvatar } from "../team/MemberEditor";
 import { memberName } from "../team/member-model";
 import { needsYou } from "./navigation-attention";
+import { NewResearch } from "./NewResearch";
 import { useResearchNavigation } from "./ResearchNavigation";
 import { teamHash } from "./team-api";
 import { colleagueStatus } from "./TeamMemberCard";
@@ -12,7 +13,7 @@ import styles from "./AllProjects.module.css";
 /** Every project at once: what waits on you, who is working where, and each project's state. */
 export function AllProjects({ go }: { go(hash: string): void }) {
   const { t, tn } = useI18n();
-  const { data } = useResearchNavigation();
+  const { data, ready } = useResearchNavigation();
   const open = data.workspaces.filter((w) => !w.archived);
   const teams = useWorkspaceTeams(open.map((w) => w.id));
   const messages = [...teams].flatMap(([id, team]) =>
@@ -28,6 +29,8 @@ export function AllProjects({ go }: { go(hash: string): void }) {
     (n, team) => n + (team.tokens || 0),
     0,
   );
+  // Before the first project there is nothing to oversee: start one here.
+  if (ready && !open.length) return <NewResearch go={go} />;
   return (
     <main className={styles.page} data-testid="all-projects">
       <header className={styles.head}>

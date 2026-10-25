@@ -70,16 +70,6 @@
   color: var(--ui-fg-2);
 }
 
-:global(html[data-desktop]) .railToggle {
-  position: fixed;
-  top: var(--ui-space-6);
-  left: calc(var(--ui-space-40) * 4);
-  z-index: 2147483647;
-  margin: 0;
-  -webkit-app-region: no-drag;
-  app-region: no-drag;
-}
-
 .railDestinations,
 .railFooter {
   display: flex;

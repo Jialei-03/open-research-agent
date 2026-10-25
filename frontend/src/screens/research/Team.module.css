@@ -556,6 +556,11 @@
 .messageBody > header {
   margin-bottom: var(--ui-space-6);
 }
+/* The avatar sits at the bubble's top-left corner, under the name line. */
+.message[data-author="agent"] > :not(.messageBody) {
+  align-self: flex-start;
+  margin-top: calc(var(--ui-control-sm) + var(--ui-space-6));
+}
 .agentTag {
   border-radius: var(--ui-r-4);
   background: var(--ui-fill);
