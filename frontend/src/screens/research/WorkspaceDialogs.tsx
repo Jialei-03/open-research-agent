@@ -63,7 +63,10 @@ export function WorkspacePicker({
   useEffect(() => {
     if (open) searchField.current?.focus();
   }, [open]);
-  const current = data.workspaces.find((workspace) => workspace.id === value);
+  // The personal space is not a project to start research in.
+  const current = data.workspaces.find(
+    (workspace) => workspace.id === value && workspace.kind !== "personal",
+  );
   const machine = (location: WorkspaceLocation) =>
     workspaceMachine(
       location,
