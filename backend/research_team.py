@@ -584,6 +584,12 @@ def has_message_content(message):
     )
 
 
+def _open_requests(d, project):
+    from .research_workspaces import _open_requests as requests
+
+    return requests(d, project)
+
+
 def research_root(project, channel, d):
     from .team_message_features import reactions
 
@@ -630,7 +636,17 @@ def research_root(project, channel, d):
         data={
             "research_id": project.id,
             "status": project.status,
+            "stage": project.stage,
             "title": project.title or project.question,
+            # What the card in the group says: where it is and what waits on you.
+            "decisions": len(_open_requests(d, project))
+            + (
+                1
+                if project.stage == "scoping"
+                and (project.plan or {}).get("version")
+                and not (project.plan or {}).get("approved_at")
+                else 0
+            ),
         },
         replies=len(sprints) + len(events) + messages + len(replies),
     )
@@ -672,6 +688,17 @@ def history(d, workspace, channel, thread_id=None):
         )
         if between_us(m)
     ]
+    # A project's group shows each of its researches as a card (opened as the research).
+    if not thread_id and channel.key == "experiments":
+        rows += [
+            research_root(p, channel, d)
+            for p in d.scalars(
+                select(ResearchProject).where(
+                    ResearchProject.workspace_id == workspace.id,
+                    ResearchProject.owner == workspace.owner,
+                )
+            )
+        ]
     if not thread_id and channel.key == "dm:advisor":
         sessions = select(AgentSession.id).where(
             AgentSession.workspace_id == workspace.id,

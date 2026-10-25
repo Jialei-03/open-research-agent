@@ -47,5 +47,9 @@ export function useWorkspaceTeams(workspaceIds: string[]) {
     ids = key ? key.split(",") : [];
     void load();
   }, [key]);
-  return useSyncExternalStore(subscribe, () => teams);
+  return useSyncExternalStore(
+    subscribe,
+    () => teams,
+    () => teams,
+  );
 }

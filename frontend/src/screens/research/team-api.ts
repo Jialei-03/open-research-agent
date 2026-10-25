@@ -174,6 +174,9 @@ export interface TeamMessage {
     thread_origin?: { thread_id: string; message_id: string };
     paused_member?: string;
     joined?: boolean;
+    stage?: string;
+    status?: string;
+    decisions?: number;
     reminder?: {
       message_id: string;
       channel_id: string;

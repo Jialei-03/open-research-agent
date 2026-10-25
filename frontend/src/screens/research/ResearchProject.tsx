@@ -30,6 +30,7 @@ import {
   IconButton,
   Menu,
   Resizer,
+  SegmentedControl,
   useResizableWidth,
   TextArea,
   TextField,
@@ -75,6 +76,7 @@ import { useChanges } from "./use-changes";
 import type { ReviewTarget } from "./ReviewChanges";
 import { PANEL_DEFAULT, PANEL_MIN, panelMax } from "../../reader/PanelResizer";
 import { buildThread, working } from "./talk/thread";
+import { ResearchBoard } from "./ResearchBoard";
 import { ThreadView, type ThreadActions } from "./talk/ThreadView";
 import { ForkDialog, ResearchOrigin } from "./ResearchChanges";
 import { AppActions } from "../../app/AppSidebar";
@@ -209,13 +211,31 @@ export function ResearchProject({
   const scroller = useRef<HTMLDivElement>(null);
   const pinned = useRef(true);
   const located = useRef("");
+  // A research reads two ways: where it stands (the board) and how it got
+  // there (the discussion). Scoping is a conversation; after it, the board leads.
+  const [view, setView] = useState<"board" | "talk" | "">("");
+  const [discussing, setDiscussing] = useState("");
+  const discuss = (itemId: string) => {
+    located.current = "";
+    setDiscussing(itemId);
+    setView("talk");
+  };
 
   useEffect(() => {
     setReview({ sprintId: "", request: 0 });
     setOutputFile("");
     setFilesOpen(false);
     setRun("");
+    setView("");
+    setDiscussing("");
   }, [id]);
+
+  // The view is chosen once, when the research opens; a stage change later
+  // does not pull the researcher out of where they are reading.
+  const opened = detail?.project.id === id ? detail.project.stage : "";
+  useEffect(() => {
+    if (opened && !view) setView(boardFirst(opened) ? "board" : "talk");
+  }, [opened, view]);
 
   // The /files command, or anything else, asks for the files panel.
   useEffect(() => {
@@ -288,14 +308,23 @@ export function ResearchProject({
   );
 
   // Follow the conversation down, unless the reader scrolled up to look back.
+  const onBoard =
+    (view || (detail?.project.stage === "scoping" ? "talk" : "board")) ===
+    "board";
   useLayoutEffect(() => {
     const el = scroller.current;
-    if (el && pinned.current) el.scrollTop = el.scrollHeight;
-  }, [items.length, pending, detail?.sprints, runs]);
+    if (el && pinned.current && !onBoard) el.scrollTop = el.scrollHeight;
+  }, [items.length, pending, detail?.sprints, runs, onBoard]);
+  // The board reads from the top.
+  useLayoutEffect(() => {
+    const el = scroller.current;
+    if (el && onBoard) el.scrollTop = 0;
+  }, [onBoard, id]);
 
-  const locatedItem = items.some((item) => item.id === locateId)
-    ? locateId
-    : events.find((event) => event.id === locateId)?.sprint_id;
+  const target = discussing || locateId;
+  const locatedItem = items.some((item) => item.id === target)
+    ? target
+    : events.find((event) => event.id === target)?.sprint_id;
   useLayoutEffect(() => {
     if (!locatedItem || located.current === locatedItem) return;
     const row = [
@@ -321,6 +350,8 @@ export function ResearchProject({
   const say = async () => {
     const words = text.trim();
     if (!words) return;
+    // What you say is part of the discussion; show it there.
+    setView("talk");
     setPending(words);
     changeText("");
     pinned.current = true;
@@ -464,6 +495,7 @@ export function ResearchProject({
     : [];
   const pinnedIds = new Set(pinnedItems.map((item) => item.id));
   const p = detail.project;
+  const shown = view || (boardFirst(p.stage) ? "board" : "talk");
   const busyNow = working(detail.sprints);
   const candidateRun = busyNow ? runsBySprint.get(busyNow.id) : undefined;
   const liveRun =
@@ -592,6 +624,17 @@ export function ResearchProject({
               </Button>
             )}
           </div>
+          <SegmentedControl
+            kind="radio"
+            size="sm"
+            label={t("research.view.board")}
+            value={shown}
+            onChange={(next) => setView(next as "board" | "talk")}
+            options={[
+              { value: "board", label: t("research.view.board") },
+              { value: "talk", label: t("research.view.talk") },
+            ]}
+          />
           <div className={styles.headTools}>
             <Menu
               label={t("research.actions")}
@@ -708,7 +751,17 @@ export function ResearchProject({
                     el.scrollHeight - el.scrollTop - el.clientHeight < 80;
                 }}
               >
-                <div className={styles.thread}>
+                {shown === "board" && (
+                  <ResearchBoard
+                    detail={detail}
+                    events={events}
+                    items={items}
+                    onDiscuss={discuss}
+                    onLog={actions.openLog}
+                    onChange={refresh}
+                  />
+                )}
+                <div className={styles.thread} hidden={shown === "board"}>
                   <ResearchOrigin
                     detail={detail}
                     go={go}
@@ -746,7 +799,9 @@ export function ResearchProject({
                   )}
                 </div>
               </div>
-              <JumpToLatest scroller={scroller} streaming={!!busyNow} />
+              {!onBoard && (
+                <JumpToLatest scroller={scroller} streaming={!!busyNow} />
+              )}
             </div>
             {!embedded && (
               <div className={styles.dock}>
@@ -998,4 +1053,9 @@ function CardJump({
       </Button>
     </div>
   ) : null;
+}
+
+/** Experiments and what follows them lead with the board; scoping and workflows are a conversation. */
+function boardFirst(stage: string) {
+  return ["experiments", "conclusion", "retrospective", "done"].includes(stage);
 }

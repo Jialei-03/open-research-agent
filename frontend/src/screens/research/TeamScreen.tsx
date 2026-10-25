@@ -37,6 +37,7 @@ import {
   Trash2,
   Users,
   X,
+  Sparkle,
 } from "lucide-react";
 import {
   Fragment,
@@ -1408,13 +1409,30 @@ export function MessageRow({
             onQuote={onQuote ? (text) => onQuote(message, text) : undefined}
           >
             {message.kind === "research" ? (
-              <button
+              // A research in the group is a card that opens the research itself.
+              <a
                 className={styles.researchCard}
-                onClick={() => openThread(message)}
+                href={`#research/${message.data.research_id}`}
               >
-                <MessageSquare size={16} aria-hidden />
-                {message.data.title || message.text}
-              </button>
+                <span className={styles.researchIcon}>
+                  <Sparkle size={16} aria-hidden />
+                </span>
+                <span className={styles.researchText}>
+                  <strong>{message.data.title || message.text}</strong>
+                  <small>
+                    {t(
+                      message.data.status === "finished"
+                        ? "research.stage.done"
+                        : (`research.stage.${message.data.stage || "scoping"}` as MessageKey),
+                    )}
+                  </small>
+                </span>
+                {!!message.data.decisions && (
+                  <span className={styles.researchWaiting}>
+                    {tn("inbox.badge", message.data.decisions)}
+                  </span>
+                )}
+              </a>
             ) : message.run ? (
               <MessageRun message={message} member={member} name={name} />
             ) : (
@@ -1503,46 +1521,48 @@ export function MessageRow({
               minute: "2-digit",
             })}
           </time>
-          {!message.thread_id && message.replies > 0 && (
-            <button
-              className={styles.replies}
-              aria-label={tn("team.replies", message.replies)}
-              onClick={() => openThread(message)}
-            >
-              {!!message.reply_authors?.length && (
-                <span
-                  className={styles.replyAuthors}
-                  role="group"
-                  aria-label={t("team.threadParticipants")}
-                >
-                  {message.reply_authors.slice(0, 3).map((id) => {
-                    const author = team.members.find((m) => m.id === id);
-                    const label = author ? displayMemberName(author, t) : id;
-                    return (
-                      <span
-                        key={id}
-                        role="img"
-                        aria-label={label}
-                        title={label}
-                      >
-                        <MemberAvatar
-                          member={author}
-                          seed={author ? undefined : id}
-                          size="sm"
-                        />
-                      </span>
-                    );
-                  })}
-                </span>
-              )}
-              <span>{tn("team.replies", message.replies)}</span>
-              {message.last_message_at && (
-                <time dateTime={message.last_message_at}>
-                  {threadDate(message.last_message_at, locale)}
-                </time>
-              )}
-            </button>
-          )}
+          {!message.thread_id &&
+            message.kind !== "research" &&
+            message.replies > 0 && (
+              <button
+                className={styles.replies}
+                aria-label={tn("team.replies", message.replies)}
+                onClick={() => openThread(message)}
+              >
+                {!!message.reply_authors?.length && (
+                  <span
+                    className={styles.replyAuthors}
+                    role="group"
+                    aria-label={t("team.threadParticipants")}
+                  >
+                    {message.reply_authors.slice(0, 3).map((id) => {
+                      const author = team.members.find((m) => m.id === id);
+                      const label = author ? displayMemberName(author, t) : id;
+                      return (
+                        <span
+                          key={id}
+                          role="img"
+                          aria-label={label}
+                          title={label}
+                        >
+                          <MemberAvatar
+                            member={author}
+                            seed={author ? undefined : id}
+                            size="sm"
+                          />
+                        </span>
+                      );
+                    })}
+                  </span>
+                )}
+                <span>{tn("team.replies", message.replies)}</span>
+                {message.last_message_at && (
+                  <time dateTime={message.last_message_at}>
+                    {threadDate(message.last_message_at, locale)}
+                  </time>
+                )}
+              </button>
+            )}
           {message.data.rule &&
             message.data.rule !== "@mention" &&
             !builtinWorkflow(message.data.workflow) && (

@@ -1739,3 +1739,108 @@ section:hover > .messageActions,
 .confirmList dd {
   margin: 0;
 }
+
+/* The research as its group: each round a colleague's message. */
+.roundRow {
+  display: flex;
+  gap: var(--ui-space-12);
+  align-items: flex-start;
+}
+
+.roundAvatar {
+  flex: none;
+  margin-top: 2px;
+}
+
+.roundBody {
+  display: grid;
+  flex: 1;
+  gap: var(--ui-space-6);
+  min-width: 0;
+}
+
+.roundHead {
+  display: flex;
+  gap: var(--ui-space-8);
+  align-items: baseline;
+  font-size: var(--ui-text-13);
+}
+
+.roundHead span {
+  padding: 1px var(--ui-space-4);
+  border-radius: var(--ui-r-4);
+  background: var(--ui-fill);
+  color: var(--ui-fg-1);
+  font-size: var(--ui-text-12);
+}
+
+.roundHead time {
+  color: var(--ui-fg-3);
+  font-size: var(--ui-text-12);
+}
+
+.handoff {
+  margin: 0;
+  padding: var(--ui-space-6) var(--ui-space-10);
+  border-radius: var(--ui-r-8);
+  background: var(--ui-fill);
+  color: var(--ui-fg-1);
+  font-size: var(--ui-text-13);
+  line-height: var(--ui-leading);
+}
+
+.handoff span {
+  margin-right: var(--ui-space-4);
+  color: var(--ui-fg-2);
+}
+
+.evidence {
+  padding: var(--ui-space-10) var(--ui-space-12);
+  border-left: 3px solid var(--ui-fg-3);
+  border-radius: 0 var(--ui-r-8) var(--ui-r-8) 0;
+  background: var(--ui-fill);
+  font-size: var(--ui-text-13);
+}
+
+.evidence[data-status="supported"] {
+  border-left-color: var(--ui-success-text);
+}
+
+.evidence[data-status="refuted"] {
+  border-left-color: var(--ui-danger-text);
+}
+
+.evidenceHead {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--ui-space-6);
+  align-items: center;
+}
+
+.evidenceNode {
+  margin-right: var(--ui-space-4);
+  font-weight: var(--ui-weight-strong);
+}
+
+.evidence p {
+  margin: var(--ui-space-6) 0 0;
+  color: var(--ui-fg-1);
+  line-height: var(--ui-leading);
+}
+
+.advice {
+  display: flex;
+  gap: var(--ui-space-8);
+  align-items: flex-start;
+  margin: 0;
+  font-size: var(--ui-text-13);
+  line-height: var(--ui-leading);
+}
+
+.advice strong {
+  flex: none;
+}
+
+.advice span {
+  color: var(--ui-fg-1);
+}

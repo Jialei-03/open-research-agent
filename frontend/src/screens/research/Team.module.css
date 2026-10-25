@@ -221,15 +221,45 @@
 .researchCard {
   display: flex;
   align-items: center;
-  gap: var(--ui-space-8);
+  gap: var(--ui-space-12);
+  min-width: 320px;
+  padding: var(--ui-space-12) var(--ui-space-14, 14px);
+  border-radius: var(--ui-r-12);
+  background: var(--ui-elev);
+  box-shadow: var(--ui-elev-1);
+  color: var(--ui-fg);
+  text-decoration: none;
+}
+.researchCard:hover {
+  background: var(--ui-hover);
+}
+.researchIcon {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: var(--ui-r-10);
+  background: var(--ui-fill);
   color: var(--ui-fg-1);
-  padding: var(--ui-space-6) var(--ui-space-8);
-  border: 0;
-  border-radius: var(--ui-r-8);
-  background: var(--ui-bg-2);
-  cursor: pointer;
-  font: inherit;
-  text-align: left;
+}
+.researchText {
+  display: grid;
+  flex: 1;
+  gap: 2px;
+  min-width: 0;
+}
+.researchText small {
+  color: var(--ui-fg-2);
+  font-size: var(--ui-text-12);
+}
+.researchWaiting {
+  flex: none;
+  padding: 2px var(--ui-space-8);
+  border-radius: var(--ui-r-pill);
+  background: color-mix(in oklab, var(--ui-warning-text) 14%, transparent);
+  color: var(--ui-warning-text);
+  font-size: var(--ui-text-12);
 }
 .replies {
   color: var(--ui-accent-text);
@@ -828,4 +858,11 @@
 
 .longToggle:hover {
   color: var(--ui-fg);
+}
+/* A research card stands on its own, not inside a message bubble. */
+.bubble:has(> div > .researchCard),
+.bubble:has(.researchCard) {
+  padding: 0;
+  background: transparent;
+  box-shadow: none;
 }

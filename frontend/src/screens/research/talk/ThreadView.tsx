@@ -20,6 +20,7 @@ import { useI18n } from "../../../i18n/I18nProvider";
 import type { MessageKey } from "../../../i18n/i18n";
 import { Button, Dialog, IconButton, Spinner, toast } from "../../../ui";
 import { describeStep } from "../describe";
+import type { Step } from "../conversation";
 import type {
   Compute,
   ResearchJob,
@@ -33,6 +34,10 @@ import { RunTurn } from "../process/Process";
 import type { ThreadItem } from "./thread";
 import { WorkflowBoundary } from "../../workflows/WorkflowProgress";
 import { CheckpointCard } from "../ChangeCards";
+import { MemberAvatar } from "../../team/MemberEditor";
+import { memberName } from "../../team/member-model";
+import { useWorkspaceTeams } from "../workspace-teams";
+import type { TeamMember } from "../team-api";
 import styles from "./Talk.module.css";
 
 const ROLE_AGENT: Record<string, Agent> = {
@@ -108,6 +113,23 @@ export function ThreadView({
   runs: Map<string, ResearchRun>;
   locateId?: string;
 }) {
+  // The research as its group: each round is a colleague's message, with who
+  // handed it over and what they asked (the round before said it in next_focus).
+  const teams = useWorkspaceTeams(
+    project.workspace_id ? [project.workspace_id] : [],
+  );
+  const members = teams.get(project.workspace_id || "")?.members ?? [];
+  const handoffs = new Map<string, { from: string; text: string }>();
+  let previous: Extract<ThreadItem, { kind: "work" }> | undefined;
+  for (const item of items) {
+    if (item.kind !== "work" || item.sprint.number === 0) continue;
+    if (previous?.sprint.next_focus)
+      handoffs.set(item.id, {
+        from: previous.sprint.role,
+        text: previous.sprint.next_focus,
+      });
+    previous = item;
+  }
   return (
     <>
       {items.map((item, index) => {
@@ -169,6 +191,8 @@ export function ThreadView({
               <WorkBlock
                 key={item.id}
                 item={item}
+                members={members}
+                handoff={handoffs.get(item.id)}
                 project={project}
                 computes={computes}
                 actions={actions}
@@ -801,13 +825,29 @@ export function RunCard({
   );
 }
 
+/** A research round's colleague: its role's member in the project's team. */
+export function roundMember(role: string, members: TeamMember[]) {
+  const wanted =
+    {
+      scoping: "advisor",
+      discussion: "advisor",
+      review: "advisor",
+      workflow: "executor",
+    }[role] || role;
+  return members.find((m) => m.role === wanted && !m.deleted);
+}
+
 function WorkBlock({
   item,
+  members,
+  handoff,
   project,
   computes,
   actions,
   run,
 }: {
+  members: TeamMember[];
+  handoff?: { from: string; text: string };
   item: Extract<ThreadItem, { kind: "work" }>;
   project: ResearchProject;
   computes: Compute[];
@@ -838,54 +878,166 @@ function WorkBlock({
         : "research.work.advisor",
     { n: item.sprint.number },
   );
+  const member = roundMember(role, members);
+  const said = item.reply || run?.response || item.sprint.summary;
+  // A round that ended without a handoff gets a generated summary of its steps;
+  // in the group that is a quiet line, the steps stay in the fold.
+  const silent =
+    !item.reply &&
+    !run?.response &&
+    /^\u672c\u8f6e\u5728\u6ca1\u6709\u4ea4\u63a5/.test(item.sprint.summary);
+  const name = member ? memberName(member, t) : title;
+  const from = handoff ? roundMember(handoff.from, members) : undefined;
+  // What changed in the map this round, and the advisor's verdicts: said out loud.
+  const changes = item.steps.filter(
+    (step) =>
+      step.action === "update_node" &&
+      ["supported", "refuted", "abandoned"].includes(
+        String((step.detail.after as { status?: string } | undefined)?.status),
+      ),
+  );
+  const advice = item.steps.filter(
+    (step) => step.action === "advice" && step.detail.reason,
+  );
   return (
-    <RunTurn
-      run={run}
-      role={role}
-      title={title}
-      final={
-        item.sprint.status === "running"
-          ? ""
-          : item.reply || run?.response || item.sprint.summary
-      }
-      elapsed={Math.max(
-        0,
-        (Date.parse(item.sprint.updated_at) -
-          Date.parse(item.sprint.created_at)) /
-          1000,
-      )}
-      footer={
-        item.sprint.status !== "running" && (
-          <MessageActions
-            text={item.reply || run?.response || item.sprint.summary}
-            at={item.replyAt || item.sprint.updated_at}
-            sprintId={item.sprint.commit_sha ? item.sprint.id : undefined}
-            actions={actions}
-          />
-        )
-      }
-    >
-      {run?.runtime.rule &&
-        project.workspace_id &&
-        !builtinWorkflow(run.runtime.rule.workflow) && (
-          <a
-            className={settingStyles.ruleLink}
-            href={`#${ruleHash(project.workspace_id, run.runtime.rule.workflow, run.runtime.rule.workflow_version, run.runtime.rule.rule)}`}
-          >
-            {run.runtime.rule.rule}
-          </a>
+    <div className={styles.roundRow}>
+      <span className={styles.roundAvatar}>
+        <MemberAvatar member={member} seed={member ? undefined : role} />
+      </span>
+      <div className={styles.roundBody}>
+        <header className={styles.roundHead}>
+          <strong>{name}</strong>
+          <span>{t("team.agent")}</span>
+          <time dateTime={item.sprint.created_at}>
+            {new Date(item.sprint.created_at).toLocaleTimeString([], {
+              hour: "2-digit",
+              minute: "2-digit",
+            })}
+          </time>
+        </header>
+        {handoff && (
+          <p className={styles.handoff}>
+            <span>
+              {t("research.group.handoff", {
+                from: from
+                  ? memberName(from, t)
+                  : t(`research.role.${handoff.from}` as MessageKey),
+              })}
+            </span>
+            {handoff.text.replaceAll("\\n", " ").split("\n")[0].slice(0, 240)}
+          </p>
         )}
-      {item.jobs.map((job) => (
-        <RunCard key={job.id} job={job} computes={computes} actions={actions} />
-      ))}
-      {item.sprint.commit_sha && item.sprint.status !== "running" && (
-        <CheckpointCard
-          id={project.id}
-          sprintId={item.sprint.id}
-          refreshKey={project.updated_at + project.status}
-          onReview={(path) => actions.review?.(item.sprint.id, path)}
-        />
+        <RunTurn
+          run={run}
+          role={role}
+          title={title}
+          final={
+            item.sprint.status === "running"
+              ? ""
+              : item.reply || run?.response || item.sprint.summary
+          }
+          elapsed={Math.max(
+            0,
+            (Date.parse(item.sprint.updated_at) -
+              Date.parse(item.sprint.created_at)) /
+              1000,
+          )}
+          footer={
+            item.sprint.status !== "running" && (
+              <MessageActions
+                text={item.reply || run?.response || item.sprint.summary}
+                at={item.replyAt || item.sprint.updated_at}
+                sprintId={item.sprint.commit_sha ? item.sprint.id : undefined}
+                actions={actions}
+              />
+            )
+          }
+        >
+          {run?.runtime.rule &&
+            project.workspace_id &&
+            !builtinWorkflow(run.runtime.rule.workflow) && (
+              <a
+                className={settingStyles.ruleLink}
+                href={`#${ruleHash(project.workspace_id, run.runtime.rule.workflow, run.runtime.rule.workflow_version, run.runtime.rule.rule)}`}
+              >
+                {run.runtime.rule.rule}
+              </a>
+            )}
+          {item.jobs.map((job) => (
+            <RunCard
+              key={job.id}
+              job={job}
+              computes={computes}
+              actions={actions}
+            />
+          ))}
+          {item.sprint.commit_sha && item.sprint.status !== "running" && (
+            <CheckpointCard
+              id={project.id}
+              sprintId={item.sprint.id}
+              refreshKey={project.updated_at + project.status}
+              onReview={(path) => actions.review?.(item.sprint.id, path)}
+            />
+          )}
+        </RunTurn>
+        {silent && item.sprint.status !== "running" && (
+          <p className={styles.systemLine}>{t("research.group.noHandoff")}</p>
+        )}
+        {changes.map((step) => (
+          <EvidenceCard key={step.id} step={step} />
+        ))}
+        {advice.map((step) => (
+          <AdviceLine key={step.id} step={step} members={members} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/** A hypothesis changed state: which, from what to what, and the reason given. */
+function EvidenceCard({ step }: { step: Step }) {
+  const { t } = useI18n();
+  const before = String(
+    (step.detail.before as { status?: string })?.status || "active",
+  );
+  const after = String(
+    (step.detail.after as { status?: string })?.status || "",
+  );
+  const reason = String(step.detail.reason || "");
+  return (
+    <div className={styles.evidence} data-status={after}>
+      <div className={styles.evidenceHead}>
+        <span className={styles.evidenceNode}>{step.node}</span>
+        <span className={styles.nodeState} data-status={before}>
+          {t(`research.node.${before}` as MessageKey)}
+        </span>
+        <span aria-hidden>→</span>
+        <span className={styles.nodeState} data-status={after}>
+          {t(`research.node.${after}` as MessageKey)}
+        </span>
+      </div>
+      {reason && !/^[a-z_]+$/.test(reason) && (
+        <p>{reason.replaceAll("\\n", "\n")}</p>
       )}
-    </RunTurn>
+    </div>
+  );
+}
+
+/** The advisor's verdict on a round, as the advisor saying it. */
+function AdviceLine({ step, members }: { step: Step; members: TeamMember[] }) {
+  const { t } = useI18n();
+  const advisor = roundMember("advisor", members);
+  return (
+    <p className={styles.advice}>
+      <MemberAvatar
+        member={advisor}
+        seed={advisor ? undefined : "advisor"}
+        size="sm"
+      />
+      <strong>
+        {advisor ? memberName(advisor, t) : t("research.role.advisor")}
+      </strong>
+      <span>{String(step.detail.reason)}</span>
+    </p>
   );
 }

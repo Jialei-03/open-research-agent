@@ -257,7 +257,9 @@ def test_research_adapter_jobs_legacy_and_normalized_text(world):
     experiments = next(
         c["id"] for c in overview["channels"] if c["key"] == "experiments"
     )
-    assert not a.get(base + f"/channels/{experiments}/messages").json()["messages"]
+    cards = a.get(base + f"/channels/{experiments}/messages").json()["messages"]
+    assert [m["kind"] for m in cards] == ["research"]
+    assert cards[0]["data"]["research_id"] == pid and "decisions" in cards[0]["data"]
     adapted = a.get(
         base + f"/channels/{experiments}/messages",
         params={"thread_id": f"research:{pid}"},

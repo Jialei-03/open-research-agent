@@ -457,8 +457,10 @@ def test_team_member_context_native_thread_keeps_speech_without_round_receipts(
     )
     d.commit()
     channel = d.get(TeamChannel, team.stable(workspace, "experiments"))
-    # Research has its own place; the channel no longer lists it.
-    assert not read_messages(d, workspace, channel)["messages"]
+    # The group shows the research as a card, by the researcher.
+    channel_page = read_messages(d, workspace, channel)
+    card = channel_page["messages"][0]
+    assert card["kind"] == "research" and card["author"]["role"] == "human"
     page = read_messages(d, workspace, channel, f"research:{project.id}")
     by_id = {row["id"]: row for row in page["messages"]}
     assert by_id[f"research:{project.id}"]["author"]["role"] == "human"

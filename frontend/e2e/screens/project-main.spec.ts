@@ -3013,6 +3013,8 @@ test("conversation turns open per-round review in an independent tabbed panel", 
   await expect(
     page.getByRole("heading", { name: "表示维度对比", exact: true }),
   ).toBeVisible();
+  // An experiment opens on its board; the rounds are in the discussion.
+  await page.getByRole("radio", { name: "讨论", exact: true }).click();
   const elapsed = page.getByRole("button", { name: "用时 3:12", exact: true });
   await expect(elapsed).toBeVisible();
   await expect(page.getByText("检查训练结果", { exact: true })).toHaveCount(0);
@@ -3334,3 +3336,100 @@ for (const locale of ["zh", "en"] as const) {
     ).toBe(true);
   });
 }
+
+test("a running experiment shows live on the board and can be stopped", async ({
+  page,
+}) => {
+  await project(page);
+  let stopped = "";
+  const started = new Date(Date.now() - 4 * 60_000).toISOString();
+  const job = {
+    id: "job-live",
+    node_id: "node-h1",
+    sprint_id: "sprint-1",
+    command: "python train.py --epochs 10",
+    status: "running",
+    exit_code: null,
+    timeout_seconds: 3600,
+    started_at: started,
+    finished_at: "",
+    log_lines: 12,
+    compute_id: "host",
+    config: { lr: 0.01, epochs: 10 },
+    metrics: { step: 3, loss: 0.4, test_acc: 0.91 },
+    points: 4,
+    tracker_url: "",
+  };
+  await page.route(`**/api/v1/research/projects/${rid}**`, async (route) => {
+    const path = new URL(route.request().url()).pathname;
+    if (path.endsWith("/jobs/job-live/series"))
+      return route.fulfill({
+        json: [0.82, 0.86, 0.89, 0.91].map((acc, step) => ({
+          step,
+          t: step,
+          loss: 1 - acc,
+          test_acc: acc,
+        })),
+      });
+    if (path.endsWith("/jobs/job-live/stop")) {
+      stopped = job.id;
+      return route.fulfill({ json: { ...job, status: "cancelled" } });
+    }
+    if (path.endsWith("/runs") || path.endsWith("/events"))
+      return route.fulfill({ json: [] });
+    if (path.endsWith(`/projects/${rid}`))
+      return route.fulfill({
+        json: {
+          project: {
+            ...research,
+            title: "MNIST 学习率",
+            status: "running",
+            stage: "experiments",
+            background: "",
+            model_config_id: "model-1",
+            budget: {},
+            spent: { tokens: 1200 },
+            session_id: researchSession,
+            workspace_id: wid,
+            plan: null,
+            conclusion_record: {},
+            environment: {},
+            created_at: at,
+          },
+          nodes: [
+            {
+              id: "node-h1",
+              parent_id: "root",
+              title: "H1 学习率 0.01 更好",
+              status: "active",
+              evidence_for: [],
+              evidence_against: [],
+            },
+          ],
+          sprints: [],
+          jobs: stopped ? [] : [job],
+          datasets: [],
+          docker: { available: true, reason: "" },
+          input_needed: "",
+        },
+      });
+    return route.fallback();
+  });
+  await page.goto(`/#research/${rid}`);
+  const card = page.getByRole("article", {
+    name: "学习率 0.01 更好",
+    exact: true,
+  });
+  await expect(card).toBeVisible();
+  // Step 3 of 10 epochs: four done.
+  await expect(card.getByRole("progressbar")).toHaveAttribute(
+    "aria-valuenow",
+    "40",
+  );
+  await expect(card.getByText("91.0%", { exact: true })).toBeVisible();
+  await expect(card.getByText(/已跑 4 分钟 · 剩约 6 分钟/)).toBeVisible();
+  if (process.env.SHOT) await page.screenshot({ path: process.env.SHOT });
+  await card.getByRole("button", { name: "停止", exact: true }).click();
+  await expect.poll(() => stopped).toBe("job-live");
+  await expect(card).toHaveCount(0);
+});
