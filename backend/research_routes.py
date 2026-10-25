@@ -10,6 +10,7 @@ from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import select, update
 
 from . import research_datasets, research_files, research_map
+from .research_callme import POINTS, points
 from .models import (
     AgentRun,
     AgentSession,
@@ -38,6 +39,15 @@ class Budget(BaseModel):
     playbook: bool | None = None
     distill: bool | None = None
     advisor: bool | None = None
+
+
+class ExplainInput(BaseModel):
+    text: str = Field(min_length=1, max_length=4000)
+    context: str = Field(default="", max_length=8000)
+
+
+class CallMeInput(BaseModel):
+    points: list[Literal["hypothesis", "spend", "conclusion"]] = Field(max_length=3)
 
 
 class DecisionInput(BaseModel):
@@ -156,6 +166,7 @@ def project_out(p, *, location=None):
         "status": p.status,
         "end_reason": p.end_reason,
         "budget": p.budget,
+        "call_me": [x for x in POINTS if x in points(p)],
         "spent": p.spent,
         "session_id": p.session_id,
         "workspace_id": p.workspace_id,
@@ -917,6 +928,30 @@ def install_research_routes(app, settings, db, auth, human, owned):
             raise HTTPException(404, "Not found")
         return series(settings, job)
 
+    @app.post("/api/v1/research/projects/{id}/explain")
+    def explain(id: str, body: ExplainInput, a=Depends(auth), d=Depends(db)):
+        """讲给我听: a few sentences on what was selected; kept nowhere."""
+        from .research_explain import explain as tell
+
+        p = project_of(d, id, a)
+        try:
+            return {"text": tell(settings, app.state.maker, p, body.text, body.context)}
+        except ValueError as e:
+            raise HTTPException(409, str(e)) from None
+        except Exception as e:  # The model service failed: say so, not a 500.
+            raise HTTPException(502, f"模型没有回应 / The model did not answer: {e}") from None
+
+    @app.put("/api/v1/research/projects/{id}/call-me")
+    def call_me(id: str, body: CallMeInput, a=Depends(auth), d=Depends(db)):
+        """When this research calls the researcher in."""
+        from .research_callme import choose
+
+        p = project_of(d, id, a, writable=True)
+        choose(p, body.points)
+        p.updated_at = now()
+        d.commit()
+        return project_out(p)
+
     @app.post("/api/v1/research/projects/{id}/jobs/{job_id}/stop")
     def stop_one_job(id: str, job_id: str, a=Depends(auth), d=Depends(db)):
         """The researcher stops one experiment; the research itself goes on."""
@@ -1223,6 +1258,8 @@ def install_research_routes(app, settings, db, auth, human, owned):
         if research_stages.decide(d, p, request, body.approve, body.note):
             applied = True
         elif body.approve:
+            # The researcher's own verdict: nothing to tell them about it.
+            d.info["ora_no_checkin"] = True
             node = d.get(ResearchNode, request.detail.get("node_id"))
             sprint = d.get(ResearchSprint, request.sprint_id)
             if (
@@ -1253,7 +1290,9 @@ def install_research_routes(app, settings, db, auth, human, owned):
             request.sprint_id,
         )
         if p.status == "waiting" and not any(
-            x["open"] for x in decisions_of(d, p) if x["id"] != event_id
+            x["open"]
+            for x in decisions_of(d, p)
+            if x["id"] != event_id and x["detail"].get("kind") != "checkin"
         ):
             p.status = "active"
         p.updated_at = now()

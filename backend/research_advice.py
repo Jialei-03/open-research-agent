@@ -9,7 +9,7 @@ evaluation runs (`budget.auto_decide`), where the advisor's proposal is taken.
 
 from sqlalchemy import select
 
-from . import research_map
+from . import research_callme, research_map
 from .models import ResearchEvent, now
 
 VERDICTS = {"continue", "invest", "kill", "pivot", "ask_human"}
@@ -298,8 +298,8 @@ def apply(d, project, sprint, args):
     ):
         from . import research_stages
 
-        if project.budget.get("auto_decide"):
-            # Nobody to ask: the answer stands as proposed.
+        if "conclusion" not in research_callme.points(project):
+            # Nobody to ask, or the researcher let it stand: the answer is final.
             research_stages.finish(
                 d,
                 project,

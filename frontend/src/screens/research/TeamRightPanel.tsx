@@ -734,7 +734,7 @@ function Desk({
     let stale = false;
     const load = () =>
       readMemberConversations(workspace, member.id).then(
-        (value) => !stale && setPlaces(value),
+        (value) => !stale && setPlaces(Array.isArray(value) ? value : []),
         () => undefined,
       );
     void load();
@@ -790,29 +790,34 @@ function Desk({
           {t("team.watch")}
         </Button>
       )}
-      {!!places.length && (
-        <section aria-label={t("panel.conversations")}>
-          <h3>{t("panel.conversations")}</h3>
-          {places.map((place) => (
-            <a
-              key={`${place.channel_id}:${place.thread_id || ""}`}
-              className={styles.taskRow}
-              href={`#${teamHash(workspace, place.channel_id, place.thread_id || "")}`}
-              onClick={followLink(
-                go,
-                teamHash(workspace, place.channel_id, place.thread_id || ""),
-              )}
-            >
-              <span className={styles.taskChip} data-state={place.status}>
-                {t(`team.task.${place.status}` as MessageKey) || place.status}
-              </span>
-              <span className={styles.treeName}>{place.title}</span>
-              <time className={styles.taskWhen}>
-                {threadDate(place.at, locale, new Date(), "relative")}
-              </time>
-            </a>
-          ))}
-        </section>
+      {[
+        ["panel.conversations", places.filter((p) => !p.private)],
+        ["team.listen.title", places.filter((p) => p.private)],
+      ].map(([label, rows]) =>
+        (rows as MemberConversation[]).length ? (
+          <section key={label as string} aria-label={t(label as MessageKey)}>
+            <h3>{t(label as MessageKey)}</h3>
+            {(rows as MemberConversation[]).map((place) => (
+              <a
+                key={`${place.channel_id}:${place.thread_id || ""}`}
+                className={styles.taskRow}
+                href={`#${teamHash(workspace, place.channel_id, place.thread_id || "")}`}
+                onClick={followLink(
+                  go,
+                  teamHash(workspace, place.channel_id, place.thread_id || ""),
+                )}
+              >
+                <span className={styles.taskChip} data-state={place.status}>
+                  {t(`team.task.${place.status}` as MessageKey) || place.status}
+                </span>
+                <span className={styles.treeName}>{place.title}</span>
+                <time className={styles.taskWhen}>
+                  {threadDate(place.at, locale, new Date(), "relative")}
+                </time>
+              </a>
+            ))}
+          </section>
+        ) : null,
       )}
       {!!tasks.length && (
         <section aria-label={t("panel.tasks")}>

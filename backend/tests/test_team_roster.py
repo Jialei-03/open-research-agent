@@ -420,3 +420,64 @@ def test_project_spend_is_actual_and_never_goes_back(world):
         row.total_tokens, row.status = 62848, "completed"
         d.commit()
     assert a.get(base).json()["tokens"] == 62848
+
+
+def test_colleagues_talk_privately_and_the_researcher_listens_in(world):
+    from types import SimpleNamespace
+
+    from backend import research_team as team
+    from backend import research_team_tools
+    from backend.models import ResearchWorkspace
+
+    app, a, _, settings, owner, _, wid, base, overview = world
+    reviewer = a.post(base + "/members/join", json={"key": "reviewer"}).json()["id"]
+    executor = a.post(base + "/members/join", json={"key": "executor"}).json()["id"]
+    advisor = next(m["id"] for m in overview["members"] if m["role"] == "advisor")
+    general = group(world)
+    call = research_team_tools._call
+    info = {"workspace_id": wid, "member_id": executor, "channel_id": general}
+    asked = call(app, owner, info, "team_ask_colleague", {
+        "colleague": "评审", "text": "这个抽取规则对不对？",
+    })
+    pair = asked["channel_id"]
+    team_now = a.get(base).json()
+    # Not among the conversations: it is listened to from a colleague's desk.
+    assert pair not in {c["id"] for c in team_now["channels"]}
+    [listening] = team_now["pairs"]
+    assert sorted(listening["pair"]) == sorted([executor, reviewer])
+    # Not a notification: the researcher only listens in.
+    assert listening["unread"] == 0
+    shown = a.get(base + f"/channels/{pair}/messages").json()["messages"]
+    assert [m["text"] for m in shown] == ["这个抽取规则对不对？"]
+    refused = a.post(
+        base + f"/channels/{pair}/messages",
+        json={"text": "插一句", "client_id": "c1"},
+    )
+    assert refused.status_code in {409, 422}
+    # A third colleague cannot speak in it.
+    with pytest.raises(ValueError):
+        call(app, owner, {**info, "member_id": advisor}, "team_send_message",
+             {"channel_id": pair, "text": "我也说一句"})
+    # The one asked is woken there, and their answer goes back to the asker.
+    with app.state.maker() as d:
+        delivery = d.scalar(
+            select(TeamDelivery).where(
+                TeamDelivery.message_id == asked["message_id"],
+                TeamDelivery.member_id == reviewer,
+            )
+        )
+        assert delivery is not None
+        team.dispatch(SimpleNamespace(**vars(settings)), d, d.get(ResearchWorkspace, wid), delivery)
+        d.commit()
+        answer = d.scalar(
+            select(TeamMessage).where(TeamMessage.source_key == f"run:{delivery.run_id}")
+        )
+        assert answer.channel_id == pair
+        assert answer.data["to"] == [executor] and answer.data["answer"] is True
+    # Asking the same colleague again keeps to the same conversation.
+    again = call(app, owner, info, "team_ask_colleague", {
+        "colleague": "评审", "text": "还有一个问题",
+    })
+    assert again["channel_id"] == pair
+    with pytest.raises(ValueError):
+        call(app, owner, info, "team_ask_colleague", {"colleague": "nobody", "text": "?"})

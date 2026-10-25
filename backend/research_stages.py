@@ -482,6 +482,16 @@ def decide(d, project, request, approve, note):
         if (note or "").strip():
             say(d, project, "human", note)
         return True
+    if kind == "checkin":
+        # Read; a word with it goes to the conversation.
+        if (note or "").strip():
+            say(d, project, "human", note)
+        return True
+    if kind == "spend":
+        from .research_callme import decide_spend
+
+        decide_spend(d, project, approve)
+        return True
     if kind == "budget":
         if approve:
             hours = 0.0

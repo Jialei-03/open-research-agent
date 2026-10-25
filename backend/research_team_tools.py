@@ -16,6 +16,7 @@ LABELS.update(
     team_set_status="设置状态",
     team_memory="记下",
     team_review_result="提交评审",
+    team_ask_colleague="私下问同事",
     team_wait_for_owner="等负责人",
     team_search_papers="学术检索",
     team_import_paper="导入论文",
@@ -79,6 +80,16 @@ TEAM_TOOLS = [
             "done_when": {"type": "string", "description": "完成的标准，可选"},
         },
         ["text"],
+        write=True,
+    ),
+    tool(
+        "team_ask_colleague",
+        "Ask one colleague something privately, outside the group channels: a quick check or a question that would only clutter them. They are woken to answer here, and their answer wakes you. The researcher can listen in. Decisions and results still go to the group.",
+        {
+            "colleague": {"type": "string", "description": "The colleague's name"},
+            "text": TEXT,
+        },
+        ["colleague", "text"],
         write=True,
     ),
     tool(
@@ -284,6 +295,36 @@ def _call(app, owner, info, name, args):
             )
             d.commit()
             return {"message_id": message.id}
+        if name == "team_ask_colleague":
+            asked = [
+                i
+                for i in team.addressed(
+                    d, workspace, [str(args.get("colleague") or "")], member
+                )
+                if i != member.id and d.get(TeamMember, i).role != "human"
+            ]
+            if len(asked) != 1:
+                raise ValueError(
+                    "找不到这位同事；用同事的名字 / No such colleague: use their name"
+                )
+            other = d.get(TeamMember, asked[0])
+            if other.paused:
+                raise ValueError(f"{other.name} 暂停中 / {other.name} is paused")
+            pair = team.pair_channel(d, workspace, member, other)
+            message = team.post(
+                d,
+                workspace,
+                pair,
+                args.get("text") or "",
+                author=member,
+                data={"to": [other.id], "ask": True},
+            )
+            d.commit()
+            return {"message_id": message.id, "channel_id": pair.id}
+        if team.is_pair(channel) and member.id not in team.pair_members(channel):
+            raise ValueError(
+                "这是另外两位同事的私下交流 / This is two other colleagues' private talk"
+            )
         if name in {"team_send_message", "team_wait_for_owner"}:
             # A direct message is the researcher's and one colleague's alone.
             if channel.member_id and channel.member_id != member.id:

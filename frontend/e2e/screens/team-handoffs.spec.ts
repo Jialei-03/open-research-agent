@@ -191,3 +191,115 @@ for (const locale of ["zh", "en"] as const) {
     );
   });
 }
+
+test("the researcher listens in on two colleagues, read-only, and speaks in the group", async ({
+  page,
+}) => {
+  const pair = "eeeeeeee-eeee-4eee-8eee-000000000009";
+  const talk: TeamMessage[] = [
+    {
+      id: "ask",
+      channel_id: pair,
+      thread_id: null,
+      author_id: "executor",
+      kind: "text",
+      text: "这个抽取规则对不对？",
+      mentions: [],
+      replies: 0,
+      created_at: stamp,
+      data: { ask: true },
+    },
+    {
+      id: "answer",
+      channel_id: pair,
+      thread_id: null,
+      author_id: "reviewer",
+      kind: "text",
+      text: "答案里有分数时会抽错。",
+      mentions: [],
+      replies: 0,
+      created_at: "2026-10-24T10:01:00Z",
+      data: { answer: true },
+    },
+  ];
+  await page.route("**/api/v1/translation-settings", (route) =>
+    route.fulfill({
+      json: {
+        configured: true,
+        active_id: "fake",
+        models: [
+          { id: "fake", name: "Fake", model: "Fake", protocol: "openai" },
+        ],
+      },
+    }),
+  );
+  await page.route("**/api/v1/health", (route) =>
+    route.fulfill({ json: { mode: "local" } }),
+  );
+  await page.route("**/api/v1/research/**", (route) => {
+    const path = new URL(route.request().url()).pathname;
+    return route.fulfill({
+      json: path.endsWith("/navigation")
+        ? {
+            workspaces: [
+              {
+                id: workspace,
+                name: "Team",
+                location: { kind: "managed", path: "", connection_id: "" },
+                researches: [],
+                archived: false,
+              },
+            ],
+            collections: [],
+          }
+        : path.endsWith("/settings")
+          ? { computes: [], states: {} }
+          : [],
+    });
+  });
+  await mockTeam(page, {
+    team: () => ({
+      pairs: [
+        {
+          id: pair,
+          key: "pair:executor:reviewer",
+          name: "执行者 · 评审",
+          member_id: null,
+          pair: ["executor", "reviewer"],
+          unread: 0,
+          last_message: null,
+          last_at: stamp,
+          working_member_ids: [],
+        },
+      ],
+    }),
+    messages: (channel, thread) =>
+      talk.filter((m) => m.channel_id === channel && m.thread_id === thread),
+  });
+  await signIn(page);
+  await page.goto(`/#team/${workspace}/${pair}`);
+  await expect(page.getByText("答案里有分数时会抽错。")).toBeVisible();
+  await expect(page.getByRole("note")).toHaveText(
+    "两位同事的私下交流 · 只读，他们看不到你",
+  );
+  // Not a place to type: the group is.
+  await expect(page.getByRole("textbox", { name: /消息|Message/ })).toHaveCount(
+    0,
+  );
+  // Not among the conversations in the sidebar.
+  await expect(
+    page.getByRole("navigation", { name: "侧栏" }).getByText("执行者 · 评审"),
+  ).toHaveCount(0);
+  await page.getByRole("button", { name: "在群里说", exact: true }).click();
+  await expect(page).toHaveURL((url) => url.hash.includes(experiments));
+  // The group has the composer the private talk does not.
+  await expect(page.getByRole("textbox", { name: /消息|Message/ })).toHaveValue(
+    "> reviewer：答案里有分数时会抽错。\n\n",
+  );
+  expect(
+    await page.evaluate(
+      ([ws, group]) => localStorage.getItem(`team-draft:${ws}:${group}:`),
+      [workspace, experiments],
+    ),
+  ).toBe("> reviewer：答案里有分数时会抽错。\n\n");
+});

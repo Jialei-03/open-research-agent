@@ -30,6 +30,8 @@ export function ResearchBoard({
   onDiscuss,
   onLog,
   onChange,
+  onDecide,
+  replay = false,
 }: {
   detail: ProjectDetail;
   events: ResearchEvent[];
@@ -37,6 +39,9 @@ export function ResearchBoard({
   onDiscuss(itemId: string): void;
   onLog(jobId: string): void;
   onChange(): void;
+  onDecide(requestId: string, approve: boolean, note: string): void;
+  /** As it stood at an earlier moment: nothing to act on, nothing live. */
+  replay?: boolean;
 }) {
   const { t } = useI18n();
   const p = detail.project;
@@ -45,11 +50,11 @@ export function ResearchBoard({
   const jobsRunning = detail.jobs.filter((j) =>
     ["queued", "running"].includes(j.status),
   );
-  const decisions = items.filter(
+  const decisions = (replay ? [] : items).filter(
     (item): item is Extract<ThreadItem, { kind: "decision" }> =>
       item.kind === "decision" && item.open,
   );
-  const plan = items.find(
+  const plan = (replay ? [] : items).find(
     (item): item is Extract<ThreadItem, { kind: "plan" }> =>
       item.kind === "plan" && item.current,
   );
@@ -81,7 +86,10 @@ export function ResearchBoard({
       (jobsRunning.length
         ? ` · ${t("research.board.now.jobs", { n: jobsRunning.length })}`
         : "")
-    : decisions.length || plan
+    : plan ||
+        decisions.some(
+          (i) => !["checkin", "question"].includes(String(i.event.detail.kind)),
+        )
       ? t("research.board.now.waiting")
       : p.status === "finished"
         ? firstSentence(p.conclusion_record?.summary || lastSummary || "")
@@ -139,36 +147,53 @@ export function ResearchBoard({
               </Button>
             </div>
           )}
-          {decisions.map((item) => (
-            <div key={item.id} className={styles.decision}>
-              <span>
-                {firstSentence(
-                  String(
-                    item.event.detail.reason ||
-                      item.event.detail.question ||
-                      "",
-                  ),
-                ) || t("research.board.decision")}
-              </span>
-              <Button
-                size="sm"
-                variant="primary"
-                onClick={() => onDiscuss(item.id)}
-              >
-                {t("inbox.open")}
-              </Button>
-            </div>
-          ))}
+          {decisions.map((item) =>
+            item.event.detail.kind === "checkin" ? (
+              <div key={item.id} className={styles.decision}>
+                <span>
+                  {String(item.event.detail.reason || "")}
+                  {" · "}
+                  {t(
+                    `research.node.${String(item.event.detail.status)}` as MessageKey,
+                  )}
+                </span>
+                <Button size="sm" onClick={() => onDecide(item.id, true, "")}>
+                  {t("research.ask.seen")}
+                </Button>
+              </div>
+            ) : (
+              <div key={item.id} className={styles.decision}>
+                <span>
+                  {firstSentence(
+                    String(
+                      item.event.detail.reason ||
+                        item.event.detail.question ||
+                        "",
+                    ),
+                  ) || t("research.board.decision")}
+                </span>
+                <Button
+                  size="sm"
+                  variant="primary"
+                  onClick={() => onDiscuss(item.id)}
+                >
+                  {t("inbox.open")}
+                </Button>
+              </div>
+            ),
+          )}
         </section>
       )}
 
-      <LiveJobs
-        projectId={p.id}
-        jobs={detail.jobs}
-        nodes={detail.nodes}
-        onLog={onLog}
-        onChange={onChange}
-      />
+      {!replay && (
+        <LiveJobs
+          projectId={p.id}
+          jobs={detail.jobs}
+          nodes={detail.nodes}
+          onLog={onLog}
+          onChange={onChange}
+        />
+      )}
 
       {!!hypotheses.length && (
         <section aria-label={t("research.board.hypotheses")}>

@@ -79,6 +79,8 @@ export interface TeamChannel {
   key: string;
   name: string;
   member_id: string | null;
+  /** The two colleagues of a private conversation; empty otherwise. */
+  pair?: string[];
   unread: number;
   pinned_count?: number;
   last_message?: {
@@ -219,6 +221,8 @@ export interface Team {
   workspace_id: string;
   members: TeamMember[];
   channels: TeamChannel[];
+  /** Two colleagues' private talk: the researcher listens in, read-only. */
+  pairs?: TeamChannel[];
   notifications: TeamMessage[];
   threads_unread?: number;
   mentions_unread?: number;
@@ -495,6 +499,8 @@ export interface MemberConversation {
   title: string;
   status: string;
   at: string;
+  /** Talk with one colleague, which the researcher listens in on. */
+  private?: boolean;
 }
 export const readMemberConversations = (id: string, member: string) =>
   api<MemberConversation[]>(

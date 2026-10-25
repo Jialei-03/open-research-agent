@@ -866,3 +866,20 @@
   background: transparent;
   box-shadow: none;
 }
+
+/* Listening in on two colleagues: said once, at the top; the composer gives way to the group. */
+.listening {
+  margin: var(--ui-space-12) auto;
+  padding: var(--ui-space-8) var(--ui-space-12);
+  border-radius: var(--ui-r-8);
+  background: var(--ui-fill);
+  color: var(--ui-fg-3);
+  font-size: var(--ui-text-12);
+  text-align: center;
+}
+
+.listenDock {
+  display: flex;
+  justify-content: center;
+  padding: var(--ui-space-12) 0;
+}

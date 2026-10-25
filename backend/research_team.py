@@ -341,6 +341,38 @@ def language_part(d, workspace):
     return "## Language\nWrite tool preambles, replies, handoffs and records in English. Preserve code, identifiers, paper titles and original errors.\n\n"
 
 
+PAIR = "pair:"
+
+
+def is_pair(channel):
+    """Two colleagues' private conversation: the researcher may listen, not speak."""
+    return channel.key.startswith(PAIR)
+
+
+def pair_members(channel):
+    return channel.key[len(PAIR) :].split(":") if is_pair(channel) else []
+
+
+def pair_channel(d, workspace, a, b):
+    key = PAIR + ":".join(sorted([a.id, b.id]))
+    channel = d.scalar(
+        select(TeamChannel).where(
+            TeamChannel.workspace_id == workspace.id, TeamChannel.key == key
+        )
+    )
+    if channel is None:
+        first, second = sorted([a, b], key=lambda m: m.id)
+        channel = TeamChannel(
+            workspace_id=workspace.id,
+            key=key,
+            name=f"{first.name} · {second.name}"[:100],
+        )
+        d.add(channel)
+        d.flush()
+    channel.archived = False
+    return channel
+
+
 def post(
     d,
     workspace,
@@ -360,8 +392,8 @@ def post(
     if workspace.archived or channel.archived:
         raise ValueError("团队或频道已归档 / Team or channel archived")
     text = normalize(text).strip()
-    # A direct message is one conversation: no threads.
-    if channel.member_id:
+    # A direct message, or two colleagues' private talk, is one conversation: no threads.
+    if channel.member_id or is_pair(channel):
         thread_id, also_channel = None, False
     if (
         not text and not any((data or {}).get(k) for k in ("forward", "quote"))
@@ -1007,7 +1039,7 @@ def overview(d, workspace, *, include_reminders=True):
             from .research_workspaces import _open_requests
 
             waiting = waiting or any(
-                _open_requests(d, p)
+                _open_requests(d, p, blocking=True)
                 for p in d.scalars(
                     select(ResearchProject).where(
                         ResearchProject.workspace_id == workspace.id
@@ -1069,10 +1101,15 @@ def overview(d, workspace, *, include_reminders=True):
     ]
     participating = {m.thread_id or m.id for m in messages if m.author_id == human}
     thread_roots = participating | {m.thread_id for m in messages if m.thread_id}
+    # Colleagues' private talk is listened to, never a notification.
+    private = {c.id for c in channels if is_pair(c)}
     unread_messages = [
         m
         for m in messages
-        if m.author_id != human and not m.data.get("read") and m.kind != "reminder"
+        if m.author_id != human
+        and not m.data.get("read")
+        and m.kind != "reminder"
+        and m.channel_id not in private
     ]
     unread_values = {m.id: message_out(d, m) for m in unread_messages}
     unread_messages = [
@@ -1114,7 +1151,11 @@ def overview(d, workspace, *, include_reminders=True):
                 unread.append(unread_values[message.id])
         channel.unread_count = count
     unread_events = activity(
-        d, workspace, messages=messages, values=unread_values, unread_only=True
+        d,
+        workspace,
+        messages=[m for m in messages if m.channel_id not in private],
+        values=unread_values,
+        unread_only=True,
     )
     notifications = {m["id"]: m for m in unread}
     notifications.update({event["id"]: event for event in unread_events})
@@ -1129,6 +1170,22 @@ def overview(d, workspace, *, include_reminders=True):
             )
         )
     )
+    def out(c):
+        return dict(
+            id=c.id,
+            key=c.key,
+            name=c.name,
+            member_id=c.member_id,
+            pair=pair_members(c),
+            unread=c.unread_count,
+            pinned_count=pin_channels.count(c.id),
+            last_message=last_messages.get(c.id),
+            last_at=last_messages[c.id]["created_at"]
+            if c.id in last_messages
+            else c.created_at,
+            working_member_ids=sorted(working[c.id]),
+        )
+
     return dict(
         workspace_id=workspace.id,
         workflow=workspace.workflow,
@@ -1141,22 +1198,9 @@ def overview(d, workspace, *, include_reminders=True):
             ],
         },
         members=statuses,
-        channels=[
-            dict(
-                id=c.id,
-                key=c.key,
-                name=c.name,
-                member_id=c.member_id,
-                unread=c.unread_count,
-                pinned_count=pin_channels.count(c.id),
-                last_message=last_messages.get(c.id),
-                last_at=last_messages[c.id]["created_at"]
-                if c.id in last_messages
-                else c.created_at,
-                working_member_ids=sorted(working[c.id]),
-            )
-            for c in channels
-        ],
+        channels=[out(c) for c in channels if not is_pair(c)],
+        # Two colleagues' private talk: listened to from a colleague's desk.
+        pairs=[out(c) for c in channels if is_pair(c)],
         notifications=sorted(
             notifications.values(), key=lambda m: (m["created_at"], m["id"])
         )[-100:],
@@ -1192,6 +1236,7 @@ def context(d, workspace, message):
         select(TeamChannel).where(
             TeamChannel.workspace_id == workspace.id,
             TeamChannel.member_id.is_(None),
+            TeamChannel.key.not_like(PAIR + "%"),
             TeamChannel.archived.is_(False),
         )
     ):
@@ -1409,6 +1454,15 @@ def dispatch(settings, d, workspace, delivery):
             **(
                 {"done_when": message.data["done_when"]}
                 if message.data.get("done_when")
+                else {}
+            ),
+            # A colleague's private question: the answer goes back to the one who asked.
+            **(
+                {"to": [author.id], "answer": True}
+                if message.data.get("ask")
+                and is_pair(channel)
+                and author
+                and author.id != member.id
                 else {}
             ),
             **{

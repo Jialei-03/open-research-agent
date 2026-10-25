@@ -26,6 +26,8 @@ export interface ResearchProject {
     max_job_seconds: number | null;
   };
   spent: { sprints: number; tokens: number; job_seconds: number };
+  /** When it calls the researcher in; the rest of the time it goes on alone. */
+  call_me?: CallPoint[];
   session_id: string;
   workspace_id: string;
   stage: Stage;
@@ -276,6 +278,8 @@ export const startProject = (body: {
   defer_start?: boolean;
   workflow_id?: string;
   message: string;
+  /** Material for the colleagues, not instructions: e.g. the conversation it came from. */
+  background?: string;
   model_config_id: string;
   compute_id?: string;
   workspace_id?: string;
@@ -316,6 +320,16 @@ export interface SeriesPoint {
 
 export const jobSeries = (projectId: string, jobId: string) =>
   api<SeriesPoint[]>(`${BASE}/${projectId}/jobs/${jobId}/series`);
+
+export const CALL_POINTS = ["hypothesis", "spend", "conclusion"] as const;
+export type CallPoint = (typeof CALL_POINTS)[number];
+
+export const setCallMe = (id: string, points: CallPoint[]) =>
+  send(`${BASE}/${id}/call-me`, { points }, "PUT") as Promise<ResearchProject>;
+
+/** 讲给我听: a few sentences on something selected on the research page. */
+export const explain = (id: string, text: string, context: string) =>
+  send(`${BASE}/${id}/explain`, { text, context }) as Promise<{ text: string }>;
 
 /** Stops one experiment; the research goes on. */
 export const stopJob = (projectId: string, jobId: string) =>

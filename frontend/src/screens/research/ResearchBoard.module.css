@@ -345,3 +345,207 @@ button.number:hover {
   display: flex;
   gap: var(--ui-space-6);
 }
+
+.callMe {
+  display: grid;
+  gap: var(--ui-space-10);
+}
+
+.callMe label {
+  display: flex;
+  gap: var(--ui-space-8);
+  align-items: center;
+  font-size: var(--ui-text-14);
+}
+
+.away {
+  box-sizing: border-box;
+  width: min(100%, var(--ui-conversation-width));
+  margin: var(--ui-space-20) auto 0;
+  padding: var(--ui-space-12) var(--ui-space-16);
+  border: 1px solid var(--ui-edge-subtle);
+  border-radius: var(--ui-r-12);
+}
+
+.away header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.away h3 {
+  margin: 0;
+}
+
+.away ul {
+  display: grid;
+  gap: var(--ui-space-6);
+  margin: var(--ui-space-6) 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--ui-text-14);
+}
+
+.away .link {
+  font-size: inherit;
+  text-align: left;
+}
+
+/* 讲给我听: a button under the selection, then the answer in its place. */
+.explain {
+  position: fixed;
+  z-index: 50;
+  transform: translateX(-50%);
+}
+
+.explain > button {
+  padding: var(--ui-space-4) var(--ui-space-10);
+  border: 1px solid var(--ui-edge-subtle);
+  border-radius: var(--ui-r-8);
+  background: var(--ui-bg);
+  box-shadow: var(--ui-elev-2);
+  color: var(--ui-fg);
+  font: inherit;
+  font-size: var(--ui-text-12);
+  cursor: pointer;
+}
+
+.explain > div {
+  box-sizing: border-box;
+  width: 340px;
+  padding: var(--ui-space-10) var(--ui-space-12) var(--ui-space-12);
+  border: 1px solid var(--ui-edge-subtle);
+  border-radius: var(--ui-r-12);
+  background: var(--ui-bg);
+  box-shadow: var(--ui-elev-2);
+}
+
+.explain header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: var(--ui-text-12);
+}
+
+.explain p {
+  margin: var(--ui-space-6) 0 0;
+  font-size: var(--ui-text-14);
+  line-height: var(--ui-leading);
+  white-space: pre-wrap;
+}
+
+.explain p[data-failed] {
+  color: var(--ui-danger-text);
+}
+
+/* 回放: a scrubber, the board as it stood, then the timeline. */
+.replay {
+  display: flex;
+  flex-direction: column;
+  width: min(100%, var(--ui-conversation-width));
+  margin: 0 auto;
+  padding-bottom: var(--ui-space-32);
+}
+
+.replay .board {
+  padding-top: var(--ui-space-12);
+}
+
+.scrub {
+  position: sticky;
+  z-index: 1;
+  top: 0;
+  display: flex;
+  gap: var(--ui-space-12);
+  align-items: center;
+  padding: var(--ui-space-12) 0;
+  background: var(--ui-bg);
+  font-size: var(--ui-text-12);
+  font-variant-numeric: tabular-nums;
+}
+
+.scrub input {
+  flex: 1;
+  accent-color: var(--ui-info-text);
+}
+
+.scrub span {
+  color: var(--ui-fg-3);
+  white-space: nowrap;
+}
+
+.timeline {
+  display: grid;
+  gap: var(--ui-space-16);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.timeline h3 {
+  margin: 0 0 var(--ui-space-6);
+  color: var(--ui-fg-3);
+  font-size: var(--ui-text-12);
+  font-weight: var(--ui-weight-regular);
+}
+
+.timeline ul {
+  display: grid;
+  gap: var(--ui-space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.timeline ul li {
+  display: flex;
+  gap: var(--ui-space-8);
+  align-items: baseline;
+  padding: var(--ui-space-6) var(--ui-space-8);
+  border-radius: var(--ui-r-8);
+}
+
+.timeline li[data-current] {
+  background: var(--ui-fill);
+}
+
+.timeline li[data-later] {
+  opacity: 0.45;
+}
+
+.step {
+  display: flex;
+  flex: 1;
+  gap: var(--ui-space-10);
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: var(--ui-text-14);
+  text-align: left;
+  cursor: pointer;
+}
+
+.step time {
+  flex: none;
+  color: var(--ui-fg-3);
+  font-size: var(--ui-text-12);
+  font-variant-numeric: tabular-nums;
+}
+
+.step b {
+  font-weight: var(--ui-weight-strong);
+}
+
+.step small {
+  display: block;
+  margin-top: var(--ui-space-2);
+  color: var(--ui-fg-3);
+  font-size: var(--ui-text-12);
+}
+
+.replayEmpty {
+  color: var(--ui-fg-3);
+}

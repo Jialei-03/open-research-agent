@@ -3433,3 +3433,400 @@ test("a running experiment shows live on the board and can be stopped", async ({
   await expect.poll(() => stopped).toBe("job-live");
   await expect(card).toHaveCount(0);
 });
+
+test("a research calls the researcher at the points they chose", async ({
+  page,
+}) => {
+  await project(page);
+  let chosen: string[] = [];
+  let seen = "";
+  const checkin = {
+    id: "checkin-1",
+    node_id: "node-h1",
+    sprint_id: null,
+    actor: "system",
+    action: "decision_requested",
+    detail: {
+      kind: "checkin",
+      proposal: "acknowledge",
+      node_id: "node-h1",
+      status: "refuted",
+      reason: "H1 学习率 0.01 更好",
+    },
+    created_at: at,
+  };
+  await page.route(`**/api/v1/research/projects/${rid}**`, async (route) => {
+    const path = new URL(route.request().url()).pathname;
+    if (path.endsWith("/call-me")) {
+      chosen = route.request().postDataJSON().points;
+      return route.fulfill({ json: {} });
+    }
+    if (path.endsWith("/decisions/checkin-1")) {
+      seen = route.request().postDataJSON().approve ? "yes" : "no";
+      return route.fulfill({ json: {} });
+    }
+    if (path.endsWith("/decisions"))
+      return route.fulfill({ json: seen ? [] : [{ ...checkin, open: true }] });
+    if (path.endsWith("/runs")) return route.fulfill({ json: [] });
+    if (path.endsWith("/events"))
+      return route.fulfill({ json: seen ? [] : [checkin] });
+    if (path.endsWith(`/projects/${rid}`))
+      return route.fulfill({
+        json: {
+          project: {
+            ...research,
+            title: "MNIST 学习率",
+            status: "active",
+            stage: "experiments",
+            background: "",
+            model_config_id: "model-1",
+            budget: {},
+            spent: { tokens: 1200 },
+            call_me: chosen.length
+              ? chosen
+              : ["hypothesis", "spend", "conclusion"],
+            session_id: researchSession,
+            workspace_id: wid,
+            plan: null,
+            conclusion_record: {},
+            environment: {},
+            created_at: at,
+          },
+          nodes: [],
+          sprints: [],
+          jobs: [],
+          datasets: [],
+          docker: { available: true, reason: "" },
+          input_needed: "",
+        },
+      });
+    return route.fallback();
+  });
+  await page.goto(`/#research/${rid}`);
+  // A settled hypothesis is shown; the work did not stop for it.
+  const board = page.getByTestId("research-board");
+  await expect(board.getByText("H1 学习率 0.01 更好 · 已否定")).toBeVisible();
+  await expect(board.getByText("等你决定", { exact: true })).toHaveCount(0);
+  await board.getByRole("button", { name: "知道了", exact: true }).click();
+  await expect.poll(() => seen).toBe("yes");
+
+  await page.getByRole("button", { name: "更多操作", exact: true }).click();
+  await page
+    .getByRole("menuitem", { name: "什么时候叫我", exact: true })
+    .click();
+  const dialog = page.getByRole("dialog", { name: "什么时候叫我" });
+  await expect(
+    dialog.getByRole("checkbox", { name: "出结论时" }),
+  ).toBeChecked();
+  if (process.env.SHOT) await page.screenshot({ path: process.env.SHOT });
+  await dialog.getByRole("checkbox", { name: "假设有结论时" }).uncheck();
+  await dialog.getByRole("button", { name: "保存", exact: true }).click();
+  await expect.poll(() => chosen).toEqual(["spend", "conclusion"]);
+  await expect(dialog).toHaveCount(0);
+});
+
+test("coming back, the research says what happened while away", async ({
+  page,
+}) => {
+  await project(page);
+  const away = new Date(Date.now() - 2 * 3600_000).toISOString();
+  const later = new Date(Date.now() - 3600_000).toISOString();
+  // Last here two hours ago, when 1,000 tokens had been spent.
+  await page.evaluate(
+    ([id, seen]) =>
+      localStorage.setItem(
+        `ora.research.seen.${id}`,
+        JSON.stringify({ at: seen, tokens: 1000 }),
+      ),
+    [rid, away],
+  );
+  const sprint = {
+    id: "sprint-away",
+    number: 3,
+    role: "executor",
+    run_id: "run-away",
+    status: "ended",
+    focus_node_id: "node-h1",
+    summary: "H1 在 3 个种子上都没有提升。",
+    next_focus: "",
+    waiting_on: [],
+    tokens: 5000,
+    created_at: later,
+    updated_at: later,
+  };
+  await page.route(`**/api/v1/research/projects/${rid}**`, async (route) => {
+    const path = new URL(route.request().url()).pathname;
+    if (path.endsWith("/runs")) return route.fulfill({ json: [] });
+    if (path.endsWith("/events"))
+      return route.fulfill({
+        json: [
+          {
+            id: "change",
+            node_id: "node-h1",
+            sprint_id: sprint.id,
+            actor: "executor",
+            action: "update_node",
+            detail: {
+              before: { status: "active" },
+              after: { status: "refuted" },
+              reason: "三个种子都没有提升",
+            },
+            created_at: later,
+          },
+        ],
+      });
+    if (path.endsWith(`/projects/${rid}`))
+      return route.fulfill({
+        json: {
+          project: {
+            ...research,
+            title: "MNIST 学习率",
+            status: "active",
+            stage: "experiments",
+            background: "",
+            model_config_id: "model-1",
+            budget: {},
+            spent: { tokens: 81000 },
+            session_id: researchSession,
+            workspace_id: wid,
+            plan: null,
+            conclusion_record: {},
+            environment: {},
+            created_at: at,
+          },
+          nodes: [
+            {
+              id: "node-h1",
+              parent_id: "root",
+              title: "H1 学习率 0.01 更好",
+              status: "refuted",
+              evidence_for: [],
+              evidence_against: [],
+            },
+          ],
+          sprints: [sprint],
+          jobs: [],
+          datasets: [],
+          docker: { available: true, reason: "" },
+          input_needed: "",
+        },
+      });
+    return route.fallback();
+  });
+  await page.goto(`/#research/${rid}`);
+  const card = page.getByRole("region", { name: "你不在时" });
+  await expect(card.getByText("同事们完成了 1 轮工作")).toBeVisible();
+  await expect(card.getByText("H1 学习率 0.01 更好 → 已否定")).toBeVisible();
+  await expect(card.getByText("花了 8万 token")).toBeVisible();
+  if (process.env.SHOT) await page.screenshot({ path: process.env.SHOT });
+  // Each line leads to where it happened.
+  await card
+    .getByRole("button", { name: "H1 学习率 0.01 更好 → 已否定" })
+    .click();
+  await expect(page.getByRole("radio", { name: "讨论" })).toBeChecked();
+  await card.getByRole("button", { name: "关闭" }).click();
+  await expect(card).toHaveCount(0);
+});
+
+test("selecting something on a research explains it in place", async ({
+  page,
+}) => {
+  await project(page);
+  const asked: { text: string; context: string }[] = [];
+  await page.route(`**/api/v1/research/projects/${rid}**`, async (route) => {
+    const path = new URL(route.request().url()).pathname;
+    if (path.endsWith("/explain")) {
+      asked.push(route.request().postDataJSON());
+      return route.fulfill({
+        json: { text: "配对 t 检验比较同一批种子上的两种设置。" },
+      });
+    }
+    if (path.endsWith("/runs") || path.endsWith("/events"))
+      return route.fulfill({ json: [] });
+    if (path.endsWith(`/projects/${rid}`))
+      return route.fulfill({
+        json: {
+          project: {
+            ...research,
+            title: "MNIST 学习率",
+            status: "active",
+            stage: "experiments",
+            background: "",
+            model_config_id: "model-1",
+            budget: {},
+            spent: { tokens: 1200 },
+            session_id: researchSession,
+            workspace_id: wid,
+            plan: null,
+            conclusion_record: {},
+            environment: {},
+            created_at: at,
+          },
+          nodes: [
+            {
+              id: "node-h1",
+              parent_id: "root",
+              title: "H1 配对t检验显著",
+              status: "active",
+              evidence_for: [],
+              evidence_against: [],
+            },
+          ],
+          sprints: [],
+          jobs: [],
+          datasets: [],
+          docker: { available: true, reason: "" },
+          input_needed: "",
+        },
+      });
+    return route.fallback();
+  });
+  await page.goto(`/#research/${rid}`);
+  await page
+    .getByText("配对t检验显著", { exact: true })
+    .click({ clickCount: 3 });
+  await page.getByRole("button", { name: "讲给我听", exact: true }).click();
+  const answer = page.getByRole("dialog", { name: "讲给我听" });
+  await expect(
+    answer.getByText("配对 t 检验比较同一批种子上的两种设置。"),
+  ).toBeVisible();
+  expect(asked[0].text).toBe("配对t检验显著");
+  expect(asked[0].context).toContain("配对t检验显著");
+  if (process.env.SHOT) await page.screenshot({ path: process.env.SHOT });
+  await page.keyboard.press("Escape");
+  await expect(answer).toHaveCount(0);
+});
+
+test("a research replays step by step and exports its timeline", async ({
+  page,
+}) => {
+  await project(page);
+  const events = [
+    {
+      id: "added",
+      node_id: "node-h1",
+      sprint_id: null,
+      actor: "advisor",
+      action: "add_node",
+      detail: { kind: "hypothesis", title: "H1 学习率 0.01 更好", reason: "" },
+      created_at: "2026-10-20T02:00:00Z",
+    },
+    {
+      id: "refuted",
+      node_id: "node-h1",
+      sprint_id: null,
+      actor: "executor",
+      action: "update_node",
+      detail: {
+        before: { status: "active" },
+        after: { status: "refuted" },
+        reason: "三个种子都没有提升",
+      },
+      created_at: "2026-10-21T03:00:00Z",
+    },
+  ];
+  await page.route(`**/api/v1/research/projects/${rid}**`, async (route) => {
+    const path = new URL(route.request().url()).pathname;
+    if (path.endsWith("/runs")) return route.fulfill({ json: [] });
+    if (path.endsWith("/events")) return route.fulfill({ json: events });
+    if (path.endsWith(`/projects/${rid}`))
+      return route.fulfill({
+        json: {
+          project: {
+            ...research,
+            title: "MNIST 学习率",
+            status: "active",
+            stage: "experiments",
+            background: "",
+            model_config_id: "model-1",
+            budget: {},
+            spent: { tokens: 1200 },
+            session_id: researchSession,
+            workspace_id: wid,
+            plan: null,
+            conclusion_record: {},
+            environment: {},
+            created_at: at,
+          },
+          nodes: [
+            {
+              id: "node-h1",
+              parent_id: "root",
+              title: "H1 学习率 0.01 更好",
+              status: "refuted",
+              evidence_for: [],
+              evidence_against: [],
+              created_at: "2026-10-20T02:00:00Z",
+            },
+          ],
+          sprints: [],
+          jobs: [],
+          datasets: [],
+          docker: { available: true, reason: "" },
+          input_needed: "",
+        },
+      });
+    return route.fallback();
+  });
+  await page.goto(`/#research/${rid}`);
+  await page.getByRole("radio", { name: "回放", exact: true }).click();
+  const replay = page.getByTestId("research-replay");
+  const timeline = replay.getByRole("list", { name: "回放" });
+  await expect(timeline.getByText("三个种子都没有提升")).toBeVisible();
+  const hypotheses = replay.getByRole("region", { name: "假设" });
+  await expect(hypotheses.getByText("已否定", { exact: true })).toBeVisible();
+  // Back to when it was proposed: it was still being tested.
+  await timeline.getByText("提出假设：H1 学习率 0.01 更好").click();
+  await expect(hypotheses.getByText("进行中", { exact: true })).toBeVisible();
+  if (process.env.SHOT) await page.screenshot({ path: process.env.SHOT });
+  const download = page.waitForEvent("download");
+  await replay.getByRole("button", { name: "导出 Markdown" }).click();
+  const file = await download;
+  expect(file.suggestedFilename()).toBe("MNIST 学习率-回放.md");
+});
+
+test("what was worked out with the advisor starts a research in a project", async ({
+  page,
+}) => {
+  const state = await project(page);
+  const personal = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
+  state.workspaces = [
+    ...state.workspaces,
+    {
+      ...state.workspaces[0],
+      id: personal,
+      name: "个人空间",
+      kind: "personal",
+    },
+  ];
+  let started: Record<string, string> | null = null;
+  await page.route("**/api/v1/research/projects", (route) => {
+    if (route.request().method() !== "POST") return route.fallback();
+    started = route.request().postDataJSON();
+    return route.fulfill({ json: { ...research, id: rid } });
+  });
+  await page.goto(`/#team/${personal}/${advisorDM}`);
+  await page.reload();
+  const start = page.getByRole("button", { name: "在项目里开始", exact: true });
+  // Only under the advisor's latest reply.
+  await expect(start).toHaveCount(1);
+  await start.click();
+  const dialog = page.getByRole("dialog", { name: "在项目里开始" });
+  await expect(dialog.getByRole("combobox", { name: "项目" })).toHaveValue(wid);
+  await expect(dialog.getByRole("textbox", { name: "研究问题" })).toHaveValue(
+    "以前的问题",
+  );
+  await dialog
+    .getByRole("textbox", { name: "研究问题" })
+    .fill("学习率是否重要");
+  await dialog.getByRole("button", { name: "开始研究", exact: true }).click();
+  await expect(page).toHaveURL((url) => url.hash === `#research/${rid}`);
+  expect(started).toMatchObject({
+    message: "学习率是否重要",
+    workspace_id: wid,
+    model_config_id: "model-1",
+  });
+  // The conversation goes along as background: nothing has to be said twice.
+  expect(started!.background).toContain("第一项研究正在等待计划批准");
+  expect(started!.background).toContain("以前的回答");
+});

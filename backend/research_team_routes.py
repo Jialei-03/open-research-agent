@@ -438,13 +438,17 @@ def install_team_routes(app, settings, db, auth, workspace_of):
                 ) or f"#{channel.name}"
             else:
                 title = (
-                    f"#{channel.name}" if not channel.member_id else channel.name
+                    channel.name
+                    if channel.member_id or team.is_pair(channel)
+                    else f"#{channel.name}"
                 )
             out.append(
                 {
                     "channel_id": message.channel_id,
                     "thread_id": message.thread_id,
                     "title": title[:120],
+                    # Talk with one colleague, which the researcher listens in on.
+                    "private": team.is_pair(channel),
                     "status": run.status if run else "completed",
                     "at": message.created_at,
                 }
@@ -704,6 +708,11 @@ def install_team_routes(app, settings, db, auth, workspace_of):
         try:
             team.ensure(d, workspace)
             channel = channel_of(d, workspace, channel_id)
+            if team.is_pair(channel):
+                raise ValueError(
+                    "这是两位同事的私下交流，只能旁听；要插话请在群里说 / "
+                    "Two colleagues' private talk is read-only: speak in the group"
+                )
             key = f"user:{id}:{body.client_id}"
             message = d.scalar(select(TeamMessage).where(TeamMessage.source_key == key))
             if message:

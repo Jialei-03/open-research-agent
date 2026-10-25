@@ -565,6 +565,8 @@ def populate(data, lang):
                 d, reader.id, question, "", model_id, language=lang
             )
             project.workspace_id = workspace.id
+            # A finished history, already read: nothing to tell the researcher about.
+            d.info["ora_no_checkin"] = True
             project.title = text(
                 "检索头的质量与显存", "Recall and memory with retrieval heads"
             )

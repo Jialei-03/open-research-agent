@@ -101,6 +101,7 @@ import {
   builtinWorkflow,
 } from "../workflows/workflows-api";
 import { useResearchNavigation } from "./ResearchNavigation";
+import { StartInProject } from "./StartInProject";
 import { MemberStatus, useTeam } from "./TeamNavigation";
 import {
   deleteChannel,
@@ -214,6 +215,7 @@ export function TeamScreen({
   useEffect(() => setFile(""), [id, channelId, threadId]);
   const channel =
     team?.channels.find((c) => c.id === channelId || c.key === channelId) ||
+    team?.pairs?.find((c) => c.id === channelId) ||
     (!channelId
       ? team?.channels.find((c) => c.key === "experiments")
       : undefined);
@@ -358,7 +360,7 @@ export function TeamScreen({
             )}
             {directMember && <ColleagueStatus member={directMember} />}
             {/* A direct message is two people: only a group shows who is in it. */}
-            {team && channel && !channel.member_id && (
+            {team && channel && !channel.member_id && !channel.pair?.length && (
               <div
                 className={styles.counts}
                 role="group"
@@ -852,6 +854,22 @@ function MessagePane({
     (m) => !m.data.research_forwarded,
   );
   const dmMember = team.members.find((m) => m.id === channel.member_id);
+  // In the personal space, the advisor's latest reply can become a research in a project.
+  const { data: navigation } = useResearchNavigation();
+  const personalSpace =
+    navigation.workspaces.find((w) => w.id === team.workspace_id)?.kind ===
+    "personal";
+  const lastAdvice =
+    personalSpace && dmMember?.role === "advisor"
+      ? [...visibleMessages]
+          .reverse()
+          .find(
+            (m) =>
+              m.author_id === dmMember.id &&
+              (!m.run || m.run.status === "completed"),
+          )
+      : undefined;
+  const [starting, setStarting] = useState(false);
   const summaryAnchor = catchupAnchor(catchup, visibleMessages);
   const jumpToUnread = () => {
     const first = catchup?.first_unread;
@@ -981,6 +999,11 @@ function MessagePane({
             )}
           </div>
         )}
+        {!!channel.pair?.length && (
+          <p className={styles.listening} role="note">
+            {t("team.listen.note")}
+          </p>
+        )}
         {!visibleMessages.length && catchupCard}
         {visibleMessages.map((message, index) => (
           <Fragment key={message.id}>
@@ -1007,6 +1030,11 @@ function MessagePane({
               openThread={openThread}
               fork={fork}
               onFile={onFile}
+              onStartResearch={
+                message.id === lastAdvice?.id
+                  ? () => setStarting(true)
+                  : undefined
+              }
             />
           </Fragment>
         ))}
@@ -1021,31 +1049,50 @@ function MessagePane({
             changed={reload}
           />
         ))}
-        <TeamComposer
-          key={`${team.workspace_id}:${channel.id}:${threadId || ""}`}
-          team={team}
-          channel={channel}
-          threadId={threadId}
-          models={models}
-          modelsKnown={modelsKnown}
-          model={model}
-          onModel={onModel}
-          quote={quote}
-          onClearQuote={() => setQuote(null)}
-          sent={() => {
-            if (quote) {
-              const source = [root, ...messages].find(
-                (message) => message?.id === quote.message_id,
-              );
-              if (source) openThread(source);
-              setQuote(null);
-            }
-            pinned.current = true;
-            reload();
-            refreshTeam();
-          }}
-        />
+        {channel.pair?.length ? (
+          <ListenDock
+            team={team}
+            channel={channel}
+            messages={visibleMessages}
+            go={go}
+          />
+        ) : (
+          <TeamComposer
+            key={`${team.workspace_id}:${channel.id}:${threadId || ""}`}
+            team={team}
+            channel={channel}
+            threadId={threadId}
+            models={models}
+            modelsKnown={modelsKnown}
+            model={model}
+            onModel={onModel}
+            quote={quote}
+            onClearQuote={() => setQuote(null)}
+            sent={() => {
+              if (quote) {
+                const source = [root, ...messages].find(
+                  (message) => message?.id === quote.message_id,
+                );
+                if (source) openThread(source);
+                setQuote(null);
+              }
+              pinned.current = true;
+              reload();
+              refreshTeam();
+            }}
+          />
+        )}
       </div>
+      <StartInProject
+        open={starting}
+        messages={visibleMessages}
+        members={team.members}
+        projects={navigation.workspaces.filter(
+          (w) => w.kind !== "personal" && !w.archived,
+        )}
+        onClose={() => setStarting(false)}
+        go={(hash) => (go ? go(hash) : (window.location.hash = hash))}
+      />
     </>
   );
 }
@@ -1216,7 +1263,10 @@ export function MessageRow({
   modelName,
   onQuote,
   onReference,
+  onStartResearch,
 }: {
+  /** The advisor's reply in the personal space: start a research from it. */
+  onStartResearch?(): void;
   onReference?(reference: TeamMessageReference): void;
   onQuote?(message: TeamMessage, text: string): void;
   onFile(path: string): void;
@@ -1454,6 +1504,16 @@ export function MessageRow({
               }
             >
               {t("team.continue")}
+            </Button>
+          )}
+          {onStartResearch && (
+            <Button
+              size="sm"
+              variant="ghost"
+              icon={Sparkle}
+              onClick={onStartResearch}
+            >
+              {t("team.startInProject")}
             </Button>
           )}
           {message.data.links?.map((link) => (
@@ -2256,3 +2316,43 @@ function LongText({ children }: { children: ReactNode }) {
 
 /** How tall a message is before it folds, in pixels. */
 const LONG_TEXT = 280;
+
+/** Listening in: two colleagues' private talk is read-only; speak in the group. */
+function ListenDock({
+  team,
+  channel,
+  messages,
+  go,
+}: {
+  team: Team;
+  channel: TeamChannel;
+  messages: TeamMessage[];
+  go?(hash: string): void;
+}) {
+  const { t } = useI18n();
+  const group = team.channels.find((c) => !c.member_id);
+  const last = [...messages].reverse().find((m) => m.text.trim());
+  if (!group) return null;
+  const speak = () => {
+    const who = team.members.find((m) => m.id === last?.author_id);
+    // The group's draft starts with what was said, quoted.
+    if (last)
+      localStorage.setItem(
+        `team-draft:${team.workspace_id}:${group.id}:`,
+        t("team.listen.quote", {
+          name: who ? displayMemberName(who, t) : channel.name,
+          text: last.text.trim().slice(0, 300).replace(/\n+/g, " "),
+        }) + "\n\n",
+      );
+    const hash = teamHash(team.workspace_id, group.id);
+    if (go) go(hash);
+    else window.location.hash = hash;
+  };
+  return (
+    <div className={styles.listenDock}>
+      <Button variant="secondary" onClick={speak}>
+        {t("team.listen.speak")}
+      </Button>
+    </div>
+  );
+}

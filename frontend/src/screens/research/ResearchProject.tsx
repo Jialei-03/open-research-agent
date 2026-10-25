@@ -11,6 +11,7 @@ import {
   Pause,
   Play,
   Square,
+  Bell,
 } from "lucide-react";
 import {
   useCallback,
@@ -76,7 +77,11 @@ import { useChanges } from "./use-changes";
 import type { ReviewTarget } from "./ReviewChanges";
 import { PANEL_DEFAULT, PANEL_MIN, panelMax } from "../../reader/PanelResizer";
 import { buildThread, working } from "./talk/thread";
+import { CallMe } from "./CallMe";
+import { ExplainSelection } from "./ExplainSelection";
+import { ResearchAway } from "./ResearchAway";
 import { ResearchBoard } from "./ResearchBoard";
+import { ResearchReplay } from "./ResearchReplay";
 import { ThreadView, type ThreadActions } from "./talk/ThreadView";
 import { ForkDialog, ResearchOrigin } from "./ResearchChanges";
 import { AppActions } from "../../app/AppSidebar";
@@ -213,8 +218,9 @@ export function ResearchProject({
   const located = useRef("");
   // A research reads two ways: where it stands (the board) and how it got
   // there (the discussion). Scoping is a conversation; after it, the board leads.
-  const [view, setView] = useState<"board" | "talk" | "">("");
+  const [view, setView] = useState<"board" | "talk" | "replay" | "">("");
   const [discussing, setDiscussing] = useState("");
+  const [calling, setCalling] = useState(false);
   const discuss = (itemId: string) => {
     located.current = "";
     setDiscussing(itemId);
@@ -308,9 +314,11 @@ export function ResearchProject({
   );
 
   // Follow the conversation down, unless the reader scrolled up to look back.
+  // The board and the replay are read from the top.
   const onBoard =
-    (view || (detail?.project.stage === "scoping" ? "talk" : "board")) ===
-    "board";
+    (view ||
+      (detail && boardFirst(detail.project.stage) ? "board" : "talk")) !==
+    "talk";
   useLayoutEffect(() => {
     const el = scroller.current;
     if (el && pinned.current && !onBoard) el.scrollTop = el.scrollHeight;
@@ -629,10 +637,11 @@ export function ResearchProject({
             size="sm"
             label={t("research.view.board")}
             value={shown}
-            onChange={(next) => setView(next as "board" | "talk")}
+            onChange={(next) => setView(next as "board" | "talk" | "replay")}
             options={[
               { value: "board", label: t("research.view.board") },
               { value: "talk", label: t("research.view.talk") },
+              { value: "replay", label: t("research.view.replay") },
             ]}
           />
           <div className={styles.headTools}>
@@ -672,6 +681,12 @@ export function ResearchProject({
                   icon: GitFork,
                   disabled: !p.workspace_id,
                   onSelect: () => go(`workspaces/${p.workspace_id}/compare`),
+                },
+                {
+                  id: "call-me",
+                  label: t("research.callMe.title"),
+                  icon: Bell,
+                  onSelect: () => setCalling(true),
                 },
                 p.status === "paused"
                   ? {
@@ -751,6 +766,13 @@ export function ResearchProject({
                     el.scrollHeight - el.scrollTop - el.clientHeight < 80;
                 }}
               >
+                <ResearchAway
+                  key={p.id}
+                  detail={detail}
+                  events={events}
+                  items={items}
+                  onDiscuss={discuss}
+                />
                 {shown === "board" && (
                   <ResearchBoard
                     detail={detail}
@@ -759,9 +781,18 @@ export function ResearchProject({
                     onDiscuss={discuss}
                     onLog={actions.openLog}
                     onChange={refresh}
+                    onDecide={actions.decide}
                   />
                 )}
-                <div className={styles.thread} hidden={shown === "board"}>
+                {shown === "replay" && (
+                  <ResearchReplay
+                    detail={detail}
+                    events={events}
+                    items={items}
+                    onDiscuss={discuss}
+                  />
+                )}
+                <div className={styles.thread} hidden={shown !== "talk"}>
                   <ResearchOrigin
                     detail={detail}
                     go={go}
@@ -1005,6 +1036,15 @@ export function ResearchProject({
           </div>
         )}
       </Dialog>
+      <ExplainSelection root={scroller} projectId={p.id} />
+      <CallMe
+        open={calling}
+        projectId={p.id}
+        chosen={p.call_me ?? []}
+        onClose={() => setCalling(false)}
+        onSaved={refresh}
+        onError={fail}
+      />
       <Dialog
         open={!!log}
         onClose={() => setLog(null)}

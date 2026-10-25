@@ -594,6 +594,10 @@ function DecisionCard({
     : [];
   const conclusion = d.kind === "conclusion";
   const budget = d.kind === "budget";
+  // A hypothesis was settled: the researcher is told; the work goes on meanwhile.
+  const checkin = d.kind === "checkin";
+  // Spending grew markedly since the researcher last said to go on.
+  const spend = d.kind === "spend";
   // The advisor asks something only the researcher knows; the work goes on meanwhile.
   const question = d.kind === "question";
   return (
@@ -615,18 +619,29 @@ function DecisionCard({
               ? t("research.ask.conclusion")
               : budget
                 ? t("research.ask.budget")
-                : question
-                  ? t("research.ask.question")
-                  : t("research.ask.title")}
+                : checkin
+                  ? t("research.ask.checkin")
+                  : spend
+                    ? t("research.ask.spend")
+                    : question
+                      ? t("research.ask.question")
+                      : t("research.ask.title")}
         </strong>
-        {conclusion ? (
+        {checkin ? (
+          <span
+            className={styles.tag}
+            data-tone={d.status === "supported" ? "good" : "warn"}
+          >
+            {t(`research.node.${d.status}` as MessageKey)}
+          </span>
+        ) : conclusion ? (
           <span
             className={styles.tag}
             data-tone={d.status === "refuted" ? "warn" : "good"}
           >
             {t(`research.end.${d.status || "concluded"}` as MessageKey)}
           </span>
-        ) : d.proposal && !budget && !question ? (
+        ) : d.proposal && !budget && !question && !spend ? (
           <span className={styles.tag}>
             {t(`research.talk.verdict.${d.proposal}` as MessageKey)}
           </span>
@@ -663,7 +678,7 @@ function DecisionCard({
               {choice.title}
             </Button>
           ))}
-        {item.open && (
+        {item.open && !checkin && (
           <textarea
             className={styles.note}
             rows={question ? 3 : 2}
@@ -686,6 +701,15 @@ function DecisionCard({
               {t("research.ask.answer")}
             </Button>
           </>
+        ) : item.open && checkin ? (
+          <Button
+            size="sm"
+            variant="primary"
+            loading={actions.busy}
+            onClick={() => actions.decide(item.id, true, "")}
+          >
+            {t("research.ask.seen")}
+          </Button>
         ) : item.open ? (
           <>
             <Button
@@ -699,7 +723,7 @@ function DecisionCard({
                   ? "workflows.redo"
                   : conclusion
                     ? "research.ask.more"
-                    : budget
+                    : budget || spend
                       ? "research.ask.budgetStop"
                       : "research.ask.no",
               )}
@@ -718,7 +742,9 @@ function DecisionCard({
                     ? "research.ask.accept"
                     : budget
                       ? "research.ask.budgetMore"
-                      : "research.ask.yes",
+                      : spend
+                        ? "research.ask.spendGo"
+                        : "research.ask.yes",
               )}
             </Button>
           </>
