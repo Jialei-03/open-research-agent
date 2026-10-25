@@ -85,7 +85,10 @@ test("a provider's models are fetched, several are added in one go, and the key 
   await signIn(page);
   const { added, tested } = await mockService(page);
   await page.goto("/#settings/models");
-  const section = page.getByRole("region", { name: "模型" });
+  // The list sits in the settings window beside the settings navigation.
+  const section = page
+    .getByRole("dialog", { name: "设置", exact: true })
+    .getByRole("main");
   await expect(section.getByText("暂无条目")).toBeVisible();
 
   await section.getByRole("button", { name: "更多", exact: true }).click();
@@ -162,7 +165,10 @@ test("a first model that does not answer leaves nothing behind", async ({
     route.fulfill({ status: 502, json: { detail: "bad" } }),
   );
   await page.goto("/#settings/models");
-  const section = page.getByRole("region", { name: "模型" });
+  // The list sits in the settings window beside the settings navigation.
+  const section = page
+    .getByRole("dialog", { name: "设置", exact: true })
+    .getByRole("main");
   await section.getByRole("button", { name: "更多", exact: true }).click();
   await page.getByRole("menuitem", { name: "导入", exact: true }).click();
   const dialog = page.getByRole("dialog", { name: "导入模型" });

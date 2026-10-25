@@ -1,4 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
+import { createTranslator } from "../../src/i18n/i18n";
+import type { ModelSettings } from "../../src/screens/setup/model-api";
 import type { Paper } from "../../src/api";
 import type {
   BoardCard,
@@ -270,7 +272,12 @@ async function project(page: Page) {
         ...workspace,
         id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
         name: body.name,
-        location: body.location,
+        location: {
+          ...body.location,
+          path: body.create_folder
+            ? `${body.location.path}/${body.name}`
+            : body.location.path,
+        },
       };
       state.workspaces.push(next);
       return route.fulfill({ json: next });
@@ -310,21 +317,34 @@ async function project(page: Page) {
       const given = url.searchParams.get("path") || "";
       const connection_id = url.searchParams.get("connection_id") || "";
       state.folderRequests.push({ kind, path: given, connection_id });
-      const folder =
-        given || (kind === "ssh" ? "/home/runner" : "/home/leslie");
+      const home = kind === "ssh" ? "/home/runner" : "/home/leslie";
+      const folder = given || `${home}/ORA`;
       return route.fulfill({
         json: {
           path: folder,
-          parent: "/home",
+          parent:
+            folder === "/"
+              ? null
+              : folder.slice(0, folder.lastIndexOf("/")) || "/",
+          project_error:
+            folder === "/"
+              ? "root"
+              : folder === home
+                ? "home"
+                : folder === "/System"
+                  ? "system"
+                  : folder === `${home}/Desktop`
+                    ? "personal"
+                    : "",
           entries:
-            folder.endsWith("/ORA") || folder.endsWith("/lab")
-              ? []
-              : [
+            folder === `${home}/ORA`
+              ? [
                   {
-                    name: kind === "ssh" ? "lab" : "ORA",
-                    path: `${folder}/${kind === "ssh" ? "lab" : "ORA"}`,
+                    name: "lab",
+                    path: `${folder}/lab`,
                   },
-                ],
+                ]
+              : [],
         },
       });
     }
@@ -703,11 +723,14 @@ test("customize switches between the saved research playbook and real model sett
   await expect(
     page.getByText("固定数据和随机种子再比较", { exact: false }),
   ).toBeVisible();
-  await sidebar.locator('a[href="#customize/models"]').click();
-  await expect(page).toHaveURL(/#customize\/models$/);
-  await expect(page.getByText("模型1", { exact: true })).toBeVisible();
-  await expect(page.getByText("模型2", { exact: true })).toBeVisible();
-  await page
+  // Customize no longer lists the models: they are a connection, in the settings window.
+  await expect(sidebar.locator('a[href="#customize/models"]')).toHaveCount(0);
+  await page.goto("/#customize/models");
+  await expect(page).toHaveURL(/#settings\/models$/);
+  const settings = page.getByRole("dialog", { name: "设置", exact: true });
+  await expect(settings.getByText("模型1", { exact: true })).toBeVisible();
+  await expect(settings.getByText("模型2", { exact: true })).toBeVisible();
+  await settings
     .getByRole("button", { name: "模型2 的更多操作", exact: true })
     .click();
   await expect(
@@ -715,8 +738,9 @@ test("customize switches between the saved research playbook and real model sett
   ).toBeEnabled();
   await page.keyboard.press("Escape");
   await page.reload();
-  await expect(customize).toHaveAttribute("aria-current", "page");
-  await expect(page.getByText("模型1", { exact: true })).toBeVisible();
+  await expect(settings.getByText("模型1", { exact: true })).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(settings).toBeHidden();
   await sidebar.locator('a[href="#customize/playbook"]').click();
   await expect(
     page.getByRole("heading", { name: "研究手册", exact: true }),
@@ -964,6 +988,203 @@ test("global session search failures leave local paper search available", async 
   ).toBeVisible();
 });
 
+for (const [locale, theme, width] of [
+  ["zh", "light", 1440],
+  ["en", "dark", 720],
+] as const) {
+  for (const screen of ["new", "dm", "research"] as const) {
+    test(`${locale} ${screen}: first model setup preserves the draft and returns ready to send`, async ({
+      page,
+    }) => {
+      const { t } = createTranslator(locale);
+      await page.setViewportSize({ width, height: 1000 });
+      await page.addInitScript(
+        ({ locale, theme }) => {
+          localStorage.setItem("paper-locale", locale);
+          localStorage.setItem("paper-appearance", theme);
+        },
+        { locale, theme },
+      );
+      const state = await project(page);
+      const settings: ModelSettings = {
+        active_id: "",
+        configured: false,
+        models: [],
+      };
+      let tests = 0;
+      const sent: Record<string, unknown>[] = [];
+      const switched: string[] = [];
+      await page.route("**/api/v1/translation-settings", (route) =>
+        route.fulfill({ json: settings }),
+      );
+      await page.route("**/api/v1/translation-settings/configs**", (route) => {
+        const path = new URL(route.request().url()).pathname;
+        if (path.endsWith("/test")) {
+          tests++;
+          return route.fulfill({ json: { ok: true } });
+        }
+        if (path.endsWith("/select")) {
+          settings.active_id = "onboarding-model";
+          settings.configured = true;
+        } else if (
+          route.request().method() === "POST" &&
+          path.endsWith("/configs")
+        ) {
+          settings.models.push({
+            id: "onboarding-model",
+            name: "First model",
+            model: "first-test",
+            protocol: "openai",
+            base_url: "https://example.invalid/v1",
+          });
+        } else throw new Error(`Unexpected model request: ${path}`);
+        return route.fulfill({ json: settings });
+      });
+      await page.route(`**/api/v1/research/projects/${rid}/model`, (route) => {
+        switched.push(route.request().postDataJSON().model_config_id);
+        return route.fulfill({ json: {} });
+      });
+      for (const path of [
+        `/api/v1/research/projects/${rid}/messages`,
+        `/api/v1/research/workspaces/${wid}/team/channels/${advisorDM}/messages`,
+      ]) {
+        await page.route(`**${path}`, (route) => {
+          if (route.request().method() !== "POST") return route.fallback();
+          sent.push(route.request().postDataJSON());
+          return route.fulfill({ json: {} });
+        });
+      }
+      const hash =
+        screen === "new"
+          ? `new?workspace=${wid}`
+          : screen === "dm"
+            ? teamHash(wid, advisorDM)
+            : `research/${rid}`;
+      await page.goto(`/#${hash}`);
+      await page.reload();
+      const input = page.getByRole("textbox", {
+        name: t(
+          screen === "new"
+            ? "workspace.firstMessage"
+            : screen === "dm"
+              ? "team.message"
+              : "research.composer.label",
+        ),
+        exact: true,
+      });
+      const composer = input.locator("..");
+      const add = composer.getByRole("button", {
+        name: t("settings.models.add"),
+        exact: true,
+      });
+      await expect(add).toBeVisible();
+      await expect(add).toHaveClass(/primary/);
+      await expect(
+        page.getByRole("button", {
+          name: t("settings.models.add"),
+          exact: true,
+        }),
+      ).toHaveCount(1);
+      await expect(
+        composer.getByRole("button", {
+          name: t("research.home.model"),
+          exact: true,
+        }),
+      ).toHaveCount(0);
+      // Empty drafts can enter setup through the primary button.
+      await add.click();
+      const dialog = page.getByRole("dialog", {
+        name: t("settings.models.dialog"),
+        exact: true,
+      });
+      await expect(dialog).toBeVisible();
+      await dialog
+        .getByRole("button", { name: t("common.cancel"), exact: true })
+        .click();
+      await page.goBack();
+      await expect(input).toBeEmpty();
+      const draft = "Keep this unsent question";
+      await input.fill(draft);
+      const send = composer.getByRole("button", {
+        name: t("research.home.send"),
+        exact: true,
+      });
+      await expect(send).toBeEnabled();
+      if (screen === "dm") await input.press("Enter");
+      else await send.click();
+      await expect(page).toHaveURL(
+        (url) =>
+          url.hash.startsWith("#settings/models?") &&
+          new URLSearchParams(url.hash.split("?")[1]).get("returnTo") === hash,
+      );
+      await expect(dialog).toBeVisible();
+      expect(state.direct).toEqual([]);
+      expect(sent).toEqual([]);
+      expect(switched).toEqual([]);
+      // Reopening the page restores the saved draft before a model exists.
+      await dialog
+        .getByRole("button", { name: t("common.cancel"), exact: true })
+        .click();
+      await page.goBack();
+      await expect(input).toHaveValue(draft);
+      await page.reload();
+      await expect(input).toHaveValue(draft);
+      await expect(add).toBeVisible();
+      await input.press("Enter");
+      await expect(dialog).toBeVisible();
+      await dialog
+        .getByLabel(t("model.baseUrl"), { exact: true })
+        .fill("https://example.invalid/v1");
+      await dialog
+        .getByLabel(t("model.key"), { exact: true })
+        .fill("test-only-placeholder");
+      await dialog
+        .getByLabel(t("model.name"), { exact: true })
+        .fill("first-test");
+      await dialog
+        .getByRole("button", { name: t("model.test"), exact: true })
+        .click();
+      await expect(page).toHaveURL((url) => url.hash === `#${hash}`);
+      await expect(input).toHaveValue(draft);
+      await expect(add).toHaveCount(0);
+      await expect(
+        composer.getByRole("button", { name: "First model", exact: true }),
+      ).toBeVisible();
+      await expect(send).toBeEnabled();
+      expect(tests).toBe(1);
+      await send.click();
+      if (screen === "new") {
+        await expect
+          .poll(() => state.direct)
+          .toEqual([
+            expect.objectContaining({
+              message: draft,
+              model_config_id: "onboarding-model",
+            }),
+          ]);
+      } else {
+        await expect
+          .poll(() => sent)
+          .toEqual([
+            expect.objectContaining({
+              text: draft,
+              ...(screen === "dm"
+                ? { model_config_id: "onboarding-model" }
+                : {}),
+            }),
+          ]);
+        if (screen === "research")
+          expect(switched).toEqual(["onboarding-model"]);
+      }
+      expect(
+        await page.evaluate(
+          () => document.documentElement.scrollWidth <= innerWidth,
+        ),
+      ).toBe(true);
+    });
+  }
+}
+
 test("new research stays empty until the first message chooses a physical workspace and optional project", async ({
   page,
 }, testInfo) => {
@@ -984,13 +1205,8 @@ test("new research stays empty until the first message chooses a physical worksp
     path: testInfo.outputPath("new-research-zh-desktop.png"),
   });
   await start.getByRole("button", { name: "发送", exact: true }).click();
-  await expect(page).toHaveURL(
-    (url) =>
-      url.hash === `#${teamHash(wid, experiments, `research:${direct}`)}`,
-  );
-  await expect(
-    page.getByRole("region", { name: "线程", exact: true }),
-  ).toBeVisible();
+  // A research opens as its own conversation.
+  await expect(page).toHaveURL((url) => url.hash === `#research/${direct}`);
   expect(state.direct).toEqual([
     {
       message: "比较两个维度的表示质量",
@@ -1010,14 +1226,16 @@ test("new research keeps the workspace and classification of the open research",
 }) => {
   const state = await project(page);
   await page.goto(`/#${teamHash(wid, experiments, `research:${rid}`)}`);
-  const start = page
+  // The research section's "+" starts from the open research's project and classification.
+  await page
     .getByRole("navigation", { name: "侧栏" })
-    .getByRole("link", { name: "新研究", exact: true });
-  await expect(start).toHaveAttribute(
-    "href",
-    `#new?workspace=${wid}&collection=aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa`,
+    .getByRole("button", { name: "新研究", exact: true })
+    .click();
+  await expect(page).toHaveURL(
+    (url) =>
+      url.hash ===
+      `#new?workspace=${wid}&collection=aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa`,
   );
-  await start.click();
   const startPage = page.getByTestId("new-research");
   await expect(startPage.getByRole("heading", { level: 1 })).toHaveText(
     "想研究什么？",
@@ -1058,7 +1276,169 @@ test("a missing explicit workspace asks for a folder instead of silently changin
   expect(state.direct).toEqual([]);
 });
 
-test("workspace chooser searches real folders and creates a workspace without an empty research", async ({
+test("a new user creates a project through the rail's plus and the empty list", async ({
+  page,
+}) => {
+  const state = await project(page);
+  state.workspaces = [];
+  state.researches = [];
+  state.collections = [];
+  await page.goto("/#new");
+  await page.reload();
+  const sidebar = page.getByRole("navigation", { name: "侧栏", exact: true });
+  for (const id of [
+    "inbox",
+    "board",
+    "research-new",
+    "project-menu",
+    "activity",
+    "work",
+    "members",
+    "team-settings",
+  ])
+    await expect(sidebar.locator(`[data-id="${id}"]`)).toHaveCount(0);
+  await expect(sidebar.locator('[data-id="project"]')).toHaveCount(0);
+  await sidebar.locator('[data-id="create-project"]').click();
+  await expect(
+    page.getByRole("dialog", { name: "新建项目", exact: true }),
+  ).toBeVisible();
+  await page
+    .getByRole("dialog", { name: "新建项目", exact: true })
+    .getByRole("button", { name: "取消", exact: true })
+    .click();
+  // The rail's "+" opens the same dialog.
+  await sidebar.locator('[data-id="add-project"]').click();
+  const dialog = page.getByRole("dialog", { name: "新建项目", exact: true });
+  await expect(dialog).toBeVisible();
+  await expect(page).not.toHaveURL(/#workspaces/);
+  await expect(sidebar.getByText("新建团队", { exact: true })).toHaveCount(0);
+  await dialog.getByRole("button", { name: "取消", exact: true }).click();
+  await page.goto("/#workspaces");
+  const main = page.getByRole("main");
+  const empty = main.locator('[class*="emptyProjects"]');
+  await expect(empty.locator("svg").first()).toBeVisible();
+  await expect(main.getByText("暂无项目", { exact: true })).toHaveCount(0);
+  await empty.getByRole("button", { name: "新建项目", exact: true }).click();
+  await expect(dialog.getByRole("textbox", { name: "项目名称" })).toHaveValue(
+    "未命名项目",
+  );
+  await expect(
+    dialog.getByRole("region", { name: "已选文件夹" }),
+  ).toContainText("/home/leslie/ORA/未命名项目");
+  await dialog.getByRole("button", { name: "新建项目", exact: true }).click();
+  await expect(dialog).toHaveCount(0);
+  expect(state.workspaceRequests).toEqual([
+    {
+      name: "未命名项目",
+      create_folder: true,
+      location: { kind: "local", path: "/home/leslie/ORA", connection_id: "" },
+    },
+  ]);
+  expect(state.direct).toEqual([]);
+});
+
+for (const kind of ["local", "ssh"] as const) {
+  test(`${kind} protected folders disable project creation with a short reason`, async ({
+    page,
+  }) => {
+    const state = await project(page);
+    state.connections.push({
+      id: "lab",
+      kind: "ssh",
+      name: "Lab",
+      host: "runner@lab",
+      port: 22,
+      identity_file: "",
+    });
+    await page.goto("/#workspaces");
+    await page
+      .getByRole("main")
+      .getByRole("button", { name: "新建项目", exact: true })
+      .click();
+    const dialog = page.getByRole("dialog", { name: "新建项目", exact: true });
+    await dialog
+      .getByRole("radio", { name: "选择已有文件夹", exact: true })
+      .click();
+    if (kind === "ssh")
+      await dialog
+        .getByRole("button", { name: "Lab runner@lab", exact: true })
+        .click();
+    const home = kind === "ssh" ? "/home/runner" : "/home/leslie";
+    const address = dialog.getByRole("textbox", { name: "目录路径" });
+    await expect(address).toHaveValue(`${home}/ORA`);
+    const submit = dialog.getByRole("button", {
+      name: "使用此文件夹",
+      exact: true,
+    });
+    for (const [path, reason] of [
+      [home, "不能用主目录"],
+      ["/", "不能用根目录"],
+      ["/System", "不能用系统目录"],
+      [`${home}/Desktop`, "不能用个人目录"],
+    ]) {
+      await address.fill(path);
+      await expect(submit).toBeDisabled();
+      await address.press("Enter");
+      await expect(dialog.getByRole("status")).toHaveText(reason);
+      await expect(submit).toBeDisabled();
+    }
+    expect(state.workspaceRequests).toEqual([]);
+    await address.fill(`${home}/ORA/lab`);
+    await address.press("Enter");
+    await expect(dialog.getByRole("status")).toHaveCount(0);
+    await expect(submit).toBeEnabled();
+  });
+}
+
+test("with no project chosen, the first words go to the advisor in the personal space", async ({
+  page,
+}) => {
+  const state = await project(page);
+  const personal = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
+  state.workspaces = [
+    {
+      ...state.workspaces[0],
+      id: personal,
+      name: "个人空间",
+      kind: "personal",
+    },
+  ];
+  state.researches = [];
+  const sent: { url: string; body: { text: string } }[] = [];
+  await page.route("**/team/channels/*/messages", (route) => {
+    if (route.request().method() !== "POST") return route.fallback();
+    sent.push({
+      url: route.request().url(),
+      body: route.request().postDataJSON(),
+    });
+    return route.fulfill({ json: { id: "sent-1" } });
+  });
+  await page.goto("/#all");
+  await page.reload();
+  // Nothing to oversee yet: All projects is the start screen.
+  const start = page.getByTestId("new-research");
+  await expect(start).toBeVisible();
+  const sendButton = start.getByRole("button", { name: "发送", exact: true });
+  await expect(sendButton).toBeDisabled();
+  await start.getByRole("textbox", { name: "开始研究" }).fill("你好");
+  await sendButton.click();
+  // A greeting is a conversation, not a project or a research.
+  await expect(page).toHaveURL(
+    (url) => url.hash === `#team/${personal}/${advisorDM}`,
+  );
+  expect(sent).toEqual([
+    {
+      url: expect.stringContaining(
+        `/workspaces/${personal}/team/channels/${advisorDM}/messages`,
+      ),
+      body: expect.objectContaining({ text: "你好" }),
+    },
+  ]);
+  expect(state.workspaceRequests).toEqual([]);
+  expect(state.direct).toEqual([]);
+});
+
+test("workspace chooser creates a new folder without an empty research", async ({
   page,
 }) => {
   const state = await project(page);
@@ -1076,35 +1456,48 @@ test("workspace chooser searches real folders and creates a workspace without an
   await expect(
     dialog.getByRole("button", { name: "本机", exact: true }),
   ).toHaveAttribute("aria-pressed", "true");
-  await dialog
-    .getByRole("region", { name: "浏览文件夹" })
-    .getByRole("button", { name: "ORA", exact: true })
-    .click();
-  await expect(dialog.getByRole("textbox", { name: "目录路径" })).toHaveValue(
-    "/home/leslie/ORA",
+  await expect(
+    dialog.getByRole("radio", { name: "新建文件夹", exact: true }),
+  ).toBeChecked();
+  await expect(dialog.getByRole("region", { name: "浏览文件夹" })).toHaveCount(
+    0,
   );
   const selectedFolder = dialog.getByRole("region", { name: "已选文件夹" });
   await expect(selectedFolder).toContainText("本机");
   await expect(selectedFolder).toContainText("/home/leslie/ORA");
-  const name = dialog.getByRole("textbox", { name: "项目名称（可选）" });
-  await expect(name).toBeEmpty();
-  await expect(name).toHaveAttribute("placeholder", "ORA");
+  const name = dialog.getByRole("textbox", { name: "项目名称" });
+  await expect(name).toHaveValue("未命名项目");
+  await expect(name).toBeFocused();
+  expect(
+    await name.evaluate((input: HTMLInputElement) => [
+      input.selectionStart,
+      input.selectionEnd,
+    ]),
+  ).toEqual([0, "未命名项目".length]);
+  await name.fill("");
+  await expect(
+    dialog.getByRole("button", { name: "新建项目", exact: true }),
+  ).toBeDisabled();
+  await name.fill("../escape");
+  await expect(dialog.getByRole("status")).toHaveText("文件夹名称不合法");
+  await expect(
+    dialog.getByRole("button", { name: "新建项目", exact: true }),
+  ).toBeDisabled();
   await name.fill("实验目录");
-  await dialog
-    .getByRole("button", { name: "使用此文件夹", exact: true })
-    .click();
+  await dialog.getByRole("button", { name: "新建项目", exact: true }).click();
   await expect(dialog).toHaveCount(0);
   await expect(page.getByTestId("new-research")).toContainText("实验目录");
   expect(state.workspaceRequests).toEqual([
     {
       name: "实验目录",
+      create_folder: true,
       location: { kind: "local", path: "/home/leslie/ORA", connection_id: "" },
     },
   ]);
   expect(state.direct).toEqual([]);
   expect(state.folderRequests).toContainEqual({
     kind: "local",
-    path: "/home/leslie/ORA",
+    path: "",
     connection_id: "",
   });
 });
@@ -1122,16 +1515,17 @@ test("workspace folders hide dot directories by default and still open a hidden 
       path: given,
       connection_id: "",
     });
-    const path = given || "/home/leslie";
+    const path = given || "/home/leslie/ORA";
     return route.fulfill({
       json: {
         path,
         parent: "/home/leslie",
+        project_error: "",
         entries:
-          path === "/home/leslie"
+          path === "/home/leslie/ORA"
             ? [
-                { name: ".private", path: "/home/leslie/.private" },
-                { name: "ORA", path: "/home/leslie/ORA" },
+                { name: ".private", path: "/home/leslie/ORA/.private" },
+                { name: "lab", path: "/home/leslie/ORA/lab" },
               ]
             : [],
       },
@@ -1146,11 +1540,14 @@ test("workspace folders hide dot directories by default and still open a hidden 
     .getByRole("button", { name: "新建项目", exact: true })
     .click();
   const dialog = page.getByRole("dialog", { name: "新建项目", exact: true });
+  await dialog
+    .getByRole("radio", { name: "选择已有文件夹", exact: true })
+    .click();
   const folders = dialog.getByRole("region", { name: "浏览文件夹" });
   const hidden = folders.getByRole("button", { name: ".private", exact: true });
   const showHidden = folders.getByRole("checkbox", { name: "显示隐藏文件夹" });
   await expect(
-    folders.getByRole("button", { name: "ORA", exact: true }),
+    folders.getByRole("button", { name: "lab", exact: true }),
   ).toBeVisible();
   await expect(showHidden).not.toBeChecked();
   await expect(hidden).toHaveCount(0);
@@ -1159,27 +1556,27 @@ test("workspace folders hide dot directories by default and still open a hidden 
   await showHidden.uncheck();
   await expect(hidden).toHaveCount(0);
   const address = folders.getByRole("textbox", { name: "目录路径" });
-  await address.fill("/home/leslie/.private");
+  await address.fill("/home/leslie/ORA/.private");
   await expect(
     dialog.getByRole("button", { name: "使用此文件夹" }),
   ).toBeDisabled();
   await address.press("Enter");
   await expect(
     dialog.getByRole("region", { name: "已选文件夹" }),
-  ).toContainText("/home/leslie/.private");
-  await expect(
-    dialog.getByRole("textbox", { name: "项目名称（可选）" }),
-  ).toBeEmpty();
+  ).toContainText("/home/leslie/ORA/.private");
+  await expect(dialog.getByRole("textbox", { name: "项目名称" })).toHaveValue(
+    "未命名项目",
+  );
   await dialog
     .getByRole("button", { name: "使用此文件夹", exact: true })
     .click();
   await expect(dialog).toHaveCount(0);
   expect(state.workspaceRequests).toEqual([
     {
-      name: ".private",
+      name: "未命名项目",
       location: {
         kind: "local",
-        path: "/home/leslie/.private",
+        path: "/home/leslie/ORA/.private",
         connection_id: "",
       },
     },
@@ -1215,11 +1612,17 @@ test("SSH connections validate before a remote folder can become a workspace", a
     .getByRole("button", { name: "关闭", exact: true })
     .last()
     .click();
-  await page.getByRole("button", { name: "新建项目", exact: true }).click();
+  await page
+    .getByRole("main")
+    .getByRole("button", { name: "新建项目", exact: true })
+    .click();
   const workspaceDialog = page.getByRole("dialog", {
     name: "新建项目",
     exact: true,
   });
+  await workspaceDialog
+    .getByRole("radio", { name: "选择已有文件夹", exact: true })
+    .click();
   await workspaceDialog
     .getByRole("button", { name: "实验服务器 runner@lab", exact: true })
     .click();
@@ -1235,16 +1638,16 @@ test("SSH connections validate before a remote folder can become a workspace", a
     .click();
   await expect(
     workspaceDialog.getByRole("textbox", { name: "目录路径" }),
-  ).toHaveValue("/home/runner/lab");
+  ).toHaveValue("/home/runner/ORA/lab");
   await workspaceDialog
-    .getByRole("textbox", { name: "项目名称（可选）" })
+    .getByRole("textbox", { name: "项目名称" })
     .fill("远端实验");
   await expect(
     workspaceDialog.getByRole("region", { name: "已选文件夹" }),
   ).toContainText("实验服务器");
   await expect(
     workspaceDialog.getByRole("region", { name: "已选文件夹" }),
-  ).toContainText("/home/runner/lab");
+  ).toContainText("/home/runner/ORA/lab");
   await workspaceDialog
     .getByRole("button", { name: "使用此文件夹", exact: true })
     .click();
@@ -1254,7 +1657,7 @@ test("SSH connections validate before a remote folder can become a workspace", a
       name: "远端实验",
       location: {
         kind: "ssh",
-        path: "/home/runner/lab",
+        path: "/home/runner/ORA/lab",
         connection_id: "ssh-test",
       },
     });
@@ -1268,14 +1671,21 @@ test("SSH connections validate before a remote folder can become a workspace", a
     connection_id: "ssh-test",
   });
   expect(state.direct).toEqual([]);
-  await expect(page.getByRole("main")).toContainText(
-    "实验服务器 · /home/runner/lab",
-  );
   await expect(
     page
-      .getByRole("navigation", { name: "侧栏", exact: true })
-      .getByRole("button", { name: "切换团队", exact: true }),
-  ).toHaveText("远端实验");
+      .getByRole("main")
+      .getByTitle("实验服务器 · SSH · runner@lab · /home/runner/ORA/lab", {
+        exact: true,
+      }),
+  ).toHaveText("实验服务器");
+  // The new project heads the sidebar and its tile in the rail is the selected one.
+  const sidebar = page.getByRole("navigation", { name: "侧栏", exact: true });
+  await expect(
+    sidebar.getByRole("heading", { name: "远端实验", level: 2, exact: true }),
+  ).toBeVisible();
+  await expect(
+    sidebar.getByRole("link", { name: "远端实验", exact: true }),
+  ).toHaveAttribute("aria-current", "page");
   await expect(
     page
       .getByRole("main")
@@ -1307,7 +1717,7 @@ test("SSH connections validate before a remote folder can become a workspace", a
     .fill("runner@lab");
   await expect(folderPicker.getByRole("option")).toHaveCount(1);
   await expect(folderPicker.getByRole("option")).toContainText(
-    "实验服务器 · /home/runner/lab",
+    "实验服务器 · /home/runner/ORA/lab",
   );
   await page.keyboard.press("Escape");
   state.researches[0].workspace_id = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
@@ -1327,12 +1737,18 @@ test("SSH connections validate before a remote folder can become a workspace", a
   await expect(
     page.getByRole("complementary", { name: "研究记录" }),
   ).toBeVisible();
-  await expect(page.getByRole("tab")).toHaveCount(0);
+  await expect(
+    page.getByRole("complementary", { name: "研究记录" }).getByRole("tab"),
+  ).toHaveText(["进度", "文件", "变更", "实验"]);
   await page.getByRole("button", { name: "收起研究记录", exact: true }).click();
   await page.goto("/#workspaces/bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb");
-  await expect(page.getByRole("main")).toContainText(
-    "实验服务器 · /home/runner/lab",
-  );
+  await expect(
+    page
+      .getByRole("main")
+      .getByTitle("实验服务器 · SSH · runner@lab · /home/runner/ORA/lab", {
+        exact: true,
+      }),
+  ).toHaveText("实验服务器");
   await page.getByRole("main").locator(`a[href="#research/${rid}"]`).click();
   await expect(page).toHaveURL(new RegExp(`#research/${rid}$`));
 });
@@ -1369,37 +1785,180 @@ test("conversation actions rename the title and the project owns list and board 
   expect(state.direct).toEqual([]);
 });
 
-test("notifications open pending conversations and sidebar entries expose real state", async ({
+test("the project list puts search before archive filtering and clamps research summaries", async ({
+  page,
+}) => {
+  const state = await project(page);
+  const question = "研究问题需要比较不同数据集上的表示质量。".repeat(40);
+  const conclusion = "结论来自重复实验，适用于这组数据和设置。".repeat(120);
+  Object.assign(state.researches[0], {
+    title: "当前研究",
+    question,
+    progress: conclusion,
+    status: "finished",
+  });
+  const archived = {
+    ...research,
+    id: copy,
+    title: "归档研究",
+    archived_at: at,
+  };
+  state.researches.push(archived);
+  const untitled = {
+    ...research,
+    id: fresh,
+    question: "没有独立标题的长问题也只显示一行。".repeat(40),
+  };
+  state.researches.push(untitled);
+  await page.evaluate(() => localStorage.removeItem("paper-appearance"));
+  await page.goto(`/#workspaces/${wid}`);
+  const main = page.getByRole("main");
+  const filter = main.getByRole("radiogroup", {
+    name: "归档状态",
+    exact: true,
+  });
+  const unarchived = filter.getByRole("radio", { name: "未归档", exact: true });
+  const archivedChoice = filter.getByRole("radio", {
+    name: "已归档",
+    exact: true,
+  });
+  const search = main.getByRole("searchbox", { name: "搜索研究", exact: true });
+  const current = main.locator(`a[href="#research/${rid}"]`);
+  const oldResearch = main.locator(`a[href="#research/${copy}"]`);
+  await expect(unarchived).toBeChecked();
+  await expect(current).toBeVisible();
+  await expect(oldResearch).toHaveCount(0);
+  await expect(
+    main.getByRole("button", { name: "已归档", exact: true }),
+  ).toHaveCount(0);
+
+  for (const colorScheme of ["light", "dark"] as const) {
+    await page.emulateMedia({ colorScheme });
+    await expect(page.locator("html")).toHaveAttribute(
+      "data-theme",
+      colorScheme,
+    );
+    for (const width of [1280, 720]) {
+      await page.setViewportSize({ width, height: 900 });
+      const questionLine = current.getByText(question, { exact: true });
+      const summary = current.getByText(conclusion, { exact: true });
+      await expect(questionLine).toHaveCSS("-webkit-line-clamp", "1");
+      await expect(summary).toHaveCSS("-webkit-line-clamp", "2");
+      for (const [element, lines] of [
+        [questionLine, 1],
+        [summary, 2],
+      ] as const) {
+        const box = await element.evaluate((el) => ({
+          height: el.getBoundingClientRect().height,
+          lineHeight: parseFloat(getComputedStyle(el).lineHeight),
+          clipped: el.scrollHeight > el.clientHeight,
+        }));
+        expect(box.height).toBeLessThanOrEqual(box.lineHeight * lines + 1);
+        expect(box.clipped).toBe(true);
+      }
+      const title = main
+        .locator(`a[href="#research/${fresh}"]`)
+        .getByText(untitled.question, { exact: true });
+      await expect(title).toHaveCSS("white-space", "nowrap");
+      await expect(title).toHaveCSS("text-overflow", "ellipsis");
+      expect(
+        await title.evaluate((el) => el.scrollWidth > el.clientWidth),
+      ).toBe(true);
+      const filterBox = (await filter.boundingBox())!;
+      const searchBox = (await search.boundingBox())!;
+      expect(Math.abs(filterBox.y - searchBox.y)).toBeLessThan(4);
+      expect(searchBox.x + searchBox.width).toBeLessThan(filterBox.x);
+      const toolbarBox = (await search
+        .locator("xpath=ancestor::div[2]")
+        .boundingBox())!;
+      expect(
+        Math.abs(
+          filterBox.x + filterBox.width - toolbarBox.x - toolbarBox.width,
+        ),
+      ).toBeLessThan(1);
+      expect(
+        await main.evaluate((el) => el.scrollWidth <= el.clientWidth),
+      ).toBe(true);
+    }
+  }
+
+  await search.fill("研究");
+  await unarchived.focus();
+  await page.keyboard.press("ArrowRight");
+  await expect(archivedChoice).toBeChecked();
+  await expect(current).toHaveCount(0);
+  await expect(oldResearch).toBeVisible();
+  await expect(search).toHaveValue("研究");
+  await expect(
+    oldResearch.getByRole("button", { name: "恢复", exact: true }),
+  ).toBeVisible();
+  await search.fill("没有匹配项");
+  await expect(oldResearch).toHaveCount(0);
+  await expect(archivedChoice).toBeChecked();
+  await search.fill("");
+  await unarchived.click();
+  await expect(current).toBeVisible();
+  await expect(oldResearch).toHaveCount(0);
+});
+
+test("needs you opens pending conversations and sidebar entries expose real state", async ({
   page,
 }) => {
   const state = await project(page);
   state.researches[0].status = "waiting";
   await page.reload();
   const sidebar = page.getByRole("navigation", { name: "侧栏", exact: true });
-  const advisor = sidebar.getByRole("group", { name: "私信", exact: true });
+  const colleagues = sidebar.getByRole("group", {
+    name: "私聊",
+    exact: true,
+  });
   await expect(
-    advisor.getByRole("link", { name: "advisor", exact: true }),
+    colleagues.getByRole("link", { name: "advisor", exact: true }),
+  ).toBeVisible();
+  // The status dot is on the member's card trigger beside the conversation link.
+  await expect(
+    colleagues
+      .getByRole("button", {
+        name: createTranslator("zh").t("team.colleague.card", {
+          name: "advisor",
+        }),
+        exact: true,
+      })
+      .getByRole("img", { name: "等你", exact: true }),
   ).toBeVisible();
   await expect(
-    advisor.getByRole("img", { name: "等你", exact: true }),
+    sidebar.getByRole("button", { name: "通知", exact: true }),
+  ).toHaveCount(0);
+  // What waits is not a section of the sidebar: "Waiting on you" counts it, and its page lists it.
+  await expect(
+    sidebar.getByRole("region", { name: "需要你", exact: true }),
+  ).toHaveCount(0);
+  const waiting = sidebar.locator('[data-id="inbox"]');
+  await expect(waiting).toHaveText("待你决定");
+  await expect(
+    sidebar
+      .locator('[data-sidebar-place="research"]')
+      .getByLabel("1 件等你决定", { exact: true }),
   ).toBeVisible();
-  await sidebar.getByRole("button", { name: "通知", exact: true }).click();
-  const notifications = page.getByRole("dialog", { name: "通知", exact: true });
-  await expect(notifications).toContainText(research.question);
-  await notifications
-    .getByRole("button", { name: new RegExp(research.question) })
+  await expect(
+    sidebar
+      .locator('[data-sidebar-place="rail"] [data-id="project"]')
+      .getByLabel("1 件等你决定", { exact: true }),
+  ).toBeVisible();
+  await waiting.click();
+  await expect(page).toHaveURL((url) => url.hash === `#inbox?workspace=${wid}`);
+  const inbox = page.getByTestId("inbox");
+  await expect(
+    inbox.getByRole("heading", { name: "待你决定", level: 1, exact: true }),
+  ).toBeVisible();
+  await expect(inbox).toContainText(research.question);
+  await expect(inbox).toContainText(workspace.name);
+  await inbox
+    .getByRole("link", { name: new RegExp(research.question) })
     .click();
-  await expect(page).toHaveURL(
-    (url) => url.hash === `#${teamHash(wid, "", `research:${rid}`)}`,
-  );
-  await expect(notifications).toHaveCount(0);
-  const thread = page.getByRole("region", { name: "线程", exact: true });
-  await expect(
-    thread.getByRole("heading", { name: research.question, exact: true }),
-  ).toBeVisible();
-  await expect(
-    thread.getByRole("textbox", { name: "消息", exact: true }),
-  ).toHaveAttribute("placeholder", "接着说");
+  // A research waiting on you opens as its own conversation.
+  await expect(page).toHaveURL((url) => url.hash === `#research/${rid}`);
+  await expect(page.getByTestId("research-conversation")).toBeVisible();
   expect(state.direct).toEqual([]);
 });
 
@@ -1418,32 +1977,45 @@ test("team channels keep every research and derived conversation accessible as a
   await page.goto(`/#${teamHash(wid, experiments)}`);
   const sidebar = page.getByRole("navigation", { name: "侧栏" });
   await expect(
-    sidebar.getByRole("group", { name: "频道", exact: true }),
+    sidebar
+      .getByRole("group", { name: "群聊", exact: true })
+      .getByRole("link", { name: "实验", exact: true }),
   ).toBeVisible();
   await expect(
-    sidebar.getByRole("group", { name: "私信", exact: true }),
+    sidebar
+      .getByRole("group", { name: "私聊", exact: true })
+      .getByRole("link", { name: "advisor", exact: true }),
+  ).toBeVisible();
+  // The project's name heads its sidebar; it is not a switcher.
+  await expect(
+    sidebar.getByRole("heading", { name: workspace.name, level: 2 }),
   ).toBeVisible();
   await expect(
-    sidebar.getByRole("button", { name: "切换团队", exact: true }),
-  ).toHaveText(workspace.name);
+    sidebar.getByRole("button", { name: "切换项目", exact: true }),
+  ).toHaveCount(0);
   const channel = page.getByRole("region", { name: "实验", exact: true });
-  await expect(channel.getByRole("article")).toHaveCount(7);
-  await expect(
-    channel.getByRole("button", { name: "研究 0", exact: true }),
-  ).toBeVisible();
-  await channel.getByRole("button", { name: "研究 5", exact: true }).click();
-  const thread = page.getByRole("region", { name: "线程", exact: true });
-  await expect(
-    thread.getByRole("heading", { name: "研究 5", exact: true }),
-  ).toBeVisible();
-  await expect(page).toHaveURL(
-    (url) =>
-      url.hash ===
-      `#${teamHash(wid, experiments, `research:${state.researches[5].id}`)}`,
-  );
-  await thread.getByRole("button", { name: "关闭", exact: true }).click();
-  await expect(thread).toHaveCount(0);
-  await expect(channel.getByRole("article")).toHaveCount(7);
+  // The channel does not list the researches: the sidebar's research section does, every one.
+  await expect(channel.getByRole("article")).toHaveCount(0);
+  const rows = sidebar.locator('[data-id="research-row"]');
+  await expect(rows).toHaveCount(7);
+  // Each opens as a thread by its address (a derived one too), and the row is the current one.
+  for (const n of [0, 5]) {
+    await page.goto(
+      `/#${teamHash(wid, experiments, `research:${state.researches[n].id}`)}`,
+    );
+    const thread = page.getByRole("region", { name: "线程", exact: true });
+    await expect(
+      thread.getByRole("heading", { name: `研究 ${n}`, exact: true }),
+    ).toBeVisible();
+    await expect(rows.filter({ hasText: `研究 ${n}` })).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
+    await thread.getByRole("button", { name: "关闭", exact: true }).click();
+    await expect(thread).toHaveCount(0);
+    await expect(page).not.toHaveURL(/thread=/);
+    await expect(channel.getByRole("article")).toHaveCount(0);
+  }
   expect(state.direct).toEqual([]);
 });
 
@@ -1452,10 +2024,7 @@ test("team thread selection survives reload and remains accessible after visitin
 }) => {
   const state = await project(page);
   const sidebar = page.getByRole("navigation", { name: "侧栏" });
-  await page.goto(`/#${teamHash(wid, experiments)}`);
-  await page
-    .getByRole("button", { name: research.question, exact: true })
-    .click();
+  await page.goto(`/#${teamHash(wid, experiments, `research:${rid}`)}`);
   const thread = page.getByRole("region", { name: "线程", exact: true });
   await expect(
     thread.getByRole("heading", { name: research.question, exact: true }),
@@ -1468,7 +2037,10 @@ test("team thread selection survives reload and remains accessible after visitin
     sidebar.getByRole("link", { name: "实验", exact: true }),
   ).toHaveAttribute("aria-current", "page");
   await sidebar.getByRole("link", { name: "资料", exact: true }).click();
-  await sidebar.getByRole("link", { name: "研究", exact: true }).click();
+  // The project's tile returns to where its work was left, the open thread included.
+  await sidebar
+    .getByRole("link", { name: workspace.name, exact: true })
+    .click();
   await expect(page).toHaveURL(
     (url) => url.hash === `#${teamHash(wid, experiments, `research:${rid}`)}`,
   );
@@ -1734,7 +2306,9 @@ test("a finished research accepts a discussion and stops only its current answer
       .getByRole("complementary", { name: "研究记录" })
       .getByRole("button", { name: "查看变更", exact: true }),
   ).toHaveCount(0);
-  await expect(page.getByRole("tab")).toHaveCount(0);
+  await expect(
+    page.getByRole("complementary", { name: "研究记录" }).getByRole("tab"),
+  ).toHaveText(["进度", "文件", "变更", "实验"]);
   await page.getByRole("button", { name: "收起研究记录", exact: true }).click();
   await input.fill("解释这个结论的适用条件");
   await page.getByRole("button", { name: "发送", exact: true }).click();
@@ -2186,6 +2760,10 @@ test("memory merge requires an evidence preview and explicit confirmation, then 
   await page.getByRole("button", { name: "显示研究记录", exact: true }).click();
   await page
     .getByRole("complementary", { name: "研究记录" })
+    .getByRole("tab", { name: "变更", exact: true })
+    .click();
+  await page
+    .getByRole("complementary", { name: "研究记录" })
     .getByRole("button", { name: "合并到项目", exact: true })
     .click();
   const dialog = page.getByRole("dialog", { name: "合并到项目" });
@@ -2237,6 +2815,10 @@ test("code merge blocks conflicts, binds selected paths, and requires a refreshe
   await page.getByRole("button", { name: "显示研究记录", exact: true }).click();
   await page
     .getByRole("complementary", { name: "研究记录" })
+    .getByRole("tab", { name: "变更", exact: true })
+    .click();
+  await page
+    .getByRole("complementary", { name: "研究记录" })
     .getByRole("button", { name: "合并到项目", exact: true })
     .click();
   const dialog = page.getByRole("dialog", { name: "合并到项目" });
@@ -2286,7 +2868,7 @@ test("code merge blocks conflicts, binds selected paths, and requires a refreshe
   expect(state.cancelled.length).toBeGreaterThanOrEqual(3);
 });
 
-test("conversation turns show checkpoint cards and one ordered content panel", async ({
+test("conversation turns open per-round review in an independent tabbed panel", async ({
   page,
 }, testInfo) => {
   await branches(page);
@@ -2317,7 +2899,7 @@ test("conversation turns show checkpoint cards and one ordered content panel", a
         path: "train.py",
         added: 4,
         removed: 1,
-        diff: "diff --git a/train.py b/train.py\n-old\n+verified result",
+        diff: "diff --git a/train.py b/train.py\n--- a/train.py\n+++ b/train.py\n@@ -1 +1,4 @@\n-old\n+verified result\n+first\n+second\n+third",
       },
     ],
   };
@@ -2327,7 +2909,8 @@ test("conversation turns show checkpoint cards and one ordered content panel", a
       undos++;
       return route.fulfill({ json: { commit_sha: mergedCommit } });
     }
-    if (path.endsWith("/changes")) return route.fulfill({ json: diff });
+    if (path.endsWith("/changes"))
+      return route.fulfill({ json: { ...diff, can_undo: undos === 0 } });
     if (path.endsWith("/runs"))
       return route.fulfill({
         json: [
@@ -2430,6 +3013,8 @@ test("conversation turns show checkpoint cards and one ordered content panel", a
   await expect(
     page.getByRole("heading", { name: "表示维度对比", exact: true }),
   ).toBeVisible();
+  // An experiment opens on its board; the rounds are in the discussion.
+  await page.getByRole("radio", { name: "讨论", exact: true }).click();
   const elapsed = page.getByRole("button", { name: "用时 3:12", exact: true });
   await expect(elapsed).toBeVisible();
   await expect(page.getByText("检查训练结果", { exact: true })).toHaveCount(0);
@@ -2439,37 +3024,116 @@ test("conversation turns show checkpoint cards and one ordered content panel", a
   await expect(page.getByText("对比结果已保存", { exact: true })).toHaveCount(
     1,
   );
-  const changes = page.getByRole("article", { name: "已修改 1 个文件" });
+  const changes = page.getByRole("article", { name: "改了 1 个文件" });
   await expect(changes).toContainText("+4");
+  await expect(changes.getByRole("button", { name: /train.py/ })).toContainText(
+    "−1",
+  );
   const viewChanges = changes.getByRole("button", {
-    name: "查看变更",
+    name: "审阅",
     exact: true,
   });
   await viewChanges.focus();
-  await page.keyboard.press("Shift+Tab");
-  await page.keyboard.press("Tab");
-  await expect(viewChanges).toBeFocused();
   await page.keyboard.press("Enter");
-  await expect(page.getByRole("dialog", { name: "查看变更" })).toContainText(
-    "verified result",
-  );
-  await page.keyboard.press("Escape");
-  await changes.getByRole("button", { name: "撤销", exact: true }).focus();
-  await page.keyboard.press("Enter");
-  await expect.poll(() => undos).toBe(1);
-  await page.getByRole("button", { name: "显示研究记录", exact: true }).click();
   const panel = page.getByRole("complementary", { name: "研究记录" });
-  await expect(panel.getByRole("heading", { level: 3 })).toHaveText([
-    "变更+4−1",
+  await expect(panel.getByRole("tab")).toHaveText([
+    "进度",
+    "文件",
+    "变更",
     "实验",
-    "计划",
-    "来源",
   ]);
-  await expect(panel.getByRole("tab")).toHaveCount(0);
-  await expect(panel).toContainText("维度对比");
+  await expect(
+    panel.getByRole("tab", { name: "变更", exact: true }),
+  ).toHaveAttribute("aria-selected", "true");
+  await expect(panel.locator("[data-review-round]")).toHaveAttribute(
+    "data-review-round",
+    turn.id,
+  );
+  await expect(
+    panel.getByRole("button", { name: "对比基准", exact: true }),
+  ).toHaveText("第 2 轮检查点");
+  await expect(panel.locator("pre")).toContainText("+verified result");
+  await expect(panel.locator('[data-kind="del"]')).toContainText("-old");
+  await expect(panel.locator('[data-kind="add"]').first()).toContainText(
+    "+verified result",
+  );
+  await expect(page.getByRole("dialog", { name: "查看变更" })).toHaveCount(0);
+  const reviewedFile = panel.locator('details[data-path="train.py"]');
+  await reviewedFile.locator("summary").click();
+  await expect(reviewedFile).not.toHaveAttribute("open", "");
+  await changes.getByRole("button", { name: /train.py/ }).click();
+  await expect(reviewedFile).toHaveAttribute("open", "");
+  await expect(reviewedFile.locator("summary")).toBeFocused();
+  const separator = page.getByRole("separator", {
+    name: "调整研究记录宽度",
+    exact: true,
+  });
+  const before = Number(await separator.getAttribute("aria-valuenow"));
+  await separator.focus();
+  await separator.press("ArrowLeft");
+  await expect(separator).toHaveAttribute("aria-valuenow", String(before + 24));
+  const main = page.getByTestId("research-conversation");
+  const mainBox = (await main.boundingBox())!;
+  const panelBox = (await panel.boundingBox())!;
+  expect(Math.round(panelBox.x - mainBox.x - mainBox.width)).toBe(8);
+  expect(Math.round(panelBox.y)).toBe(Math.round(mainBox.y));
+  const total = page
+    .getByRole("heading", { name: "表示维度对比", exact: true })
+    .locator("..")
+    .getByRole("button", { name: "审阅", exact: true });
+  await expect(total).toContainText("+4−1");
+  await total.click();
+  await expect(panel.locator("[data-review-round]")).toHaveAttribute(
+    "data-review-round",
+    "",
+  );
+  await panel.getByRole("button", { name: "对比基准", exact: true }).click();
+  await page
+    .getByRole("menuitem", { name: "第 2 轮检查点", exact: true })
+    .click();
+  await panel.getByRole("button", { name: "放弃", exact: true }).click();
+  const confirm = page.getByRole("dialog", {
+    name: "放弃这轮改动？",
+    exact: true,
+  });
+  expect(undos).toBe(0);
+  await confirm.getByRole("button", { name: "放弃", exact: true }).click();
+  await expect.poll(() => undos).toBe(1);
+  await expect(
+    panel.getByRole("button", { name: "放弃", exact: true }),
+  ).toHaveCount(0);
+  await panel.getByRole("tab", { name: "实验", exact: true }).click();
+  const experiment = panel.getByRole("button", { name: /train.py/ });
+  await expect(experiment).toContainText("accuracy");
+  await expect(experiment).toContainText("3m12s");
+  expect((await experiment.boundingBox())!.height).toBe(32);
+  await page.reload();
+  await expect(
+    panel.getByRole("tab", { name: "实验", exact: true }),
+  ).toHaveAttribute("aria-selected", "true");
+  await panel.getByRole("button", { name: "关闭", exact: true }).click();
+  await page.reload();
+  await expect(panel).toHaveCount(0);
+  await page.getByRole("button", { name: "显示研究记录", exact: true }).click();
+  await expect(
+    panel.getByRole("tab", { name: "实验", exact: true }),
+  ).toHaveAttribute("aria-selected", "true");
+  await panel.getByRole("tab", { name: "进度", exact: true }).click();
+  await expect(panel).toContainText("小表示足够");
   await expect(panel).toContainText("MNIST");
+  await panel.getByRole("tab", { name: "变更", exact: true }).click();
   await page.screenshot({
-    path: testInfo.outputPath("conversation-panel-zh.png"),
+    path: testInfo.outputPath("conversation-review-zh.png"),
+  });
+  await page.setViewportSize({ width: 720, height: 900 });
+  const overlayBox = (await panel.boundingBox())!;
+  const underBox = (await main.boundingBox())!;
+  expect(overlayBox.x).toBeLessThan(underBox.x + underBox.width);
+  expect(overlayBox.x + overlayBox.width).toBeLessThanOrEqual(720);
+  await expect(separator).toBeHidden();
+  await expect(page.locator("body")).toHaveJSProperty("scrollWidth", 720);
+  await page.screenshot({
+    path: testInfo.outputPath("conversation-review-narrow-zh.png"),
   });
 });
 
@@ -2640,6 +3304,19 @@ for (const locale of ["zh", "en"] as const) {
     await page.keyboard.press("Tab");
     await expect(start).toBeFocused();
     await page.keyboard.press("Enter");
+    // Experiments start only after the confirmation says what will happen.
+    const confirm = page.getByRole("dialog", {
+      name: locale === "zh" ? "开始实验？" : "Start the experiments?",
+      exact: true,
+    });
+    await expect(confirm).toBeVisible();
+    expect(approved).toBe(false);
+    await confirm
+      .getByRole("button", {
+        name: locale === "zh" ? "开始实验" : "Start experiments",
+        exact: true,
+      })
+      .click();
     await expect.poll(() => approved).toBe(true);
     const accept = page.getByRole("button", {
       name: locale === "zh" ? "接受结论" : "Accept conclusion",
@@ -2659,3 +3336,497 @@ for (const locale of ["zh", "en"] as const) {
     ).toBe(true);
   });
 }
+
+test("a running experiment shows live on the board and can be stopped", async ({
+  page,
+}) => {
+  await project(page);
+  let stopped = "";
+  const started = new Date(Date.now() - 4 * 60_000).toISOString();
+  const job = {
+    id: "job-live",
+    node_id: "node-h1",
+    sprint_id: "sprint-1",
+    command: "python train.py --epochs 10",
+    status: "running",
+    exit_code: null,
+    timeout_seconds: 3600,
+    started_at: started,
+    finished_at: "",
+    log_lines: 12,
+    compute_id: "host",
+    config: { lr: 0.01, epochs: 10 },
+    metrics: { step: 3, loss: 0.4, test_acc: 0.91 },
+    points: 4,
+    tracker_url: "",
+  };
+  await page.route(`**/api/v1/research/projects/${rid}**`, async (route) => {
+    const path = new URL(route.request().url()).pathname;
+    if (path.endsWith("/jobs/job-live/series"))
+      return route.fulfill({
+        json: [0.82, 0.86, 0.89, 0.91].map((acc, step) => ({
+          step,
+          t: step,
+          loss: 1 - acc,
+          test_acc: acc,
+        })),
+      });
+    if (path.endsWith("/jobs/job-live/stop")) {
+      stopped = job.id;
+      return route.fulfill({ json: { ...job, status: "cancelled" } });
+    }
+    if (path.endsWith("/runs") || path.endsWith("/events"))
+      return route.fulfill({ json: [] });
+    if (path.endsWith(`/projects/${rid}`))
+      return route.fulfill({
+        json: {
+          project: {
+            ...research,
+            title: "MNIST 学习率",
+            status: "running",
+            stage: "experiments",
+            background: "",
+            model_config_id: "model-1",
+            budget: {},
+            spent: { tokens: 1200 },
+            session_id: researchSession,
+            workspace_id: wid,
+            plan: null,
+            conclusion_record: {},
+            environment: {},
+            created_at: at,
+          },
+          nodes: [
+            {
+              id: "node-h1",
+              parent_id: "root",
+              title: "H1 学习率 0.01 更好",
+              status: "active",
+              evidence_for: [],
+              evidence_against: [],
+            },
+          ],
+          sprints: [],
+          jobs: stopped ? [] : [job],
+          datasets: [],
+          docker: { available: true, reason: "" },
+          input_needed: "",
+        },
+      });
+    return route.fallback();
+  });
+  await page.goto(`/#research/${rid}`);
+  const card = page.getByRole("article", {
+    name: "学习率 0.01 更好",
+    exact: true,
+  });
+  await expect(card).toBeVisible();
+  // Step 3 of 10 epochs: four done.
+  await expect(card.getByRole("progressbar")).toHaveAttribute(
+    "aria-valuenow",
+    "40",
+  );
+  await expect(card.getByText("91.0%", { exact: true })).toBeVisible();
+  await expect(card.getByText(/已跑 4 分钟 · 剩约 6 分钟/)).toBeVisible();
+  if (process.env.SHOT) await page.screenshot({ path: process.env.SHOT });
+  await card.getByRole("button", { name: "停止", exact: true }).click();
+  await expect.poll(() => stopped).toBe("job-live");
+  await expect(card).toHaveCount(0);
+});
+
+test("a research calls the researcher at the points they chose", async ({
+  page,
+}) => {
+  await project(page);
+  let chosen: string[] = [];
+  let seen = "";
+  const checkin = {
+    id: "checkin-1",
+    node_id: "node-h1",
+    sprint_id: null,
+    actor: "system",
+    action: "decision_requested",
+    detail: {
+      kind: "checkin",
+      proposal: "acknowledge",
+      node_id: "node-h1",
+      status: "refuted",
+      reason: "H1 学习率 0.01 更好",
+    },
+    created_at: at,
+  };
+  await page.route(`**/api/v1/research/projects/${rid}**`, async (route) => {
+    const path = new URL(route.request().url()).pathname;
+    if (path.endsWith("/call-me")) {
+      chosen = route.request().postDataJSON().points;
+      return route.fulfill({ json: {} });
+    }
+    if (path.endsWith("/decisions/checkin-1")) {
+      seen = route.request().postDataJSON().approve ? "yes" : "no";
+      return route.fulfill({ json: {} });
+    }
+    if (path.endsWith("/decisions"))
+      return route.fulfill({ json: seen ? [] : [{ ...checkin, open: true }] });
+    if (path.endsWith("/runs")) return route.fulfill({ json: [] });
+    if (path.endsWith("/events"))
+      return route.fulfill({ json: seen ? [] : [checkin] });
+    if (path.endsWith(`/projects/${rid}`))
+      return route.fulfill({
+        json: {
+          project: {
+            ...research,
+            title: "MNIST 学习率",
+            status: "active",
+            stage: "experiments",
+            background: "",
+            model_config_id: "model-1",
+            budget: {},
+            spent: { tokens: 1200 },
+            call_me: chosen.length
+              ? chosen
+              : ["hypothesis", "spend", "conclusion"],
+            session_id: researchSession,
+            workspace_id: wid,
+            plan: null,
+            conclusion_record: {},
+            environment: {},
+            created_at: at,
+          },
+          nodes: [],
+          sprints: [],
+          jobs: [],
+          datasets: [],
+          docker: { available: true, reason: "" },
+          input_needed: "",
+        },
+      });
+    return route.fallback();
+  });
+  await page.goto(`/#research/${rid}`);
+  // A settled hypothesis is shown; the work did not stop for it.
+  const board = page.getByTestId("research-board");
+  await expect(board.getByText("H1 学习率 0.01 更好 · 已否定")).toBeVisible();
+  await expect(board.getByText("等你决定", { exact: true })).toHaveCount(0);
+  await board.getByRole("button", { name: "知道了", exact: true }).click();
+  await expect.poll(() => seen).toBe("yes");
+
+  await page.getByRole("button", { name: "更多操作", exact: true }).click();
+  await page
+    .getByRole("menuitem", { name: "什么时候叫我", exact: true })
+    .click();
+  const dialog = page.getByRole("dialog", { name: "什么时候叫我" });
+  await expect(
+    dialog.getByRole("checkbox", { name: "出结论时" }),
+  ).toBeChecked();
+  if (process.env.SHOT) await page.screenshot({ path: process.env.SHOT });
+  await dialog.getByRole("checkbox", { name: "假设有结论时" }).uncheck();
+  await dialog.getByRole("button", { name: "保存", exact: true }).click();
+  await expect.poll(() => chosen).toEqual(["spend", "conclusion"]);
+  await expect(dialog).toHaveCount(0);
+});
+
+test("coming back, the research says what happened while away", async ({
+  page,
+}) => {
+  await project(page);
+  const away = new Date(Date.now() - 2 * 3600_000).toISOString();
+  const later = new Date(Date.now() - 3600_000).toISOString();
+  // Last here two hours ago, when 1,000 tokens had been spent.
+  await page.evaluate(
+    ([id, seen]) =>
+      localStorage.setItem(
+        `ora.research.seen.${id}`,
+        JSON.stringify({ at: seen, tokens: 1000 }),
+      ),
+    [rid, away],
+  );
+  const sprint = {
+    id: "sprint-away",
+    number: 3,
+    role: "executor",
+    run_id: "run-away",
+    status: "ended",
+    focus_node_id: "node-h1",
+    summary: "H1 在 3 个种子上都没有提升。",
+    next_focus: "",
+    waiting_on: [],
+    tokens: 5000,
+    created_at: later,
+    updated_at: later,
+  };
+  await page.route(`**/api/v1/research/projects/${rid}**`, async (route) => {
+    const path = new URL(route.request().url()).pathname;
+    if (path.endsWith("/runs")) return route.fulfill({ json: [] });
+    if (path.endsWith("/events"))
+      return route.fulfill({
+        json: [
+          {
+            id: "change",
+            node_id: "node-h1",
+            sprint_id: sprint.id,
+            actor: "executor",
+            action: "update_node",
+            detail: {
+              before: { status: "active" },
+              after: { status: "refuted" },
+              reason: "三个种子都没有提升",
+            },
+            created_at: later,
+          },
+        ],
+      });
+    if (path.endsWith(`/projects/${rid}`))
+      return route.fulfill({
+        json: {
+          project: {
+            ...research,
+            title: "MNIST 学习率",
+            status: "active",
+            stage: "experiments",
+            background: "",
+            model_config_id: "model-1",
+            budget: {},
+            spent: { tokens: 81000 },
+            session_id: researchSession,
+            workspace_id: wid,
+            plan: null,
+            conclusion_record: {},
+            environment: {},
+            created_at: at,
+          },
+          nodes: [
+            {
+              id: "node-h1",
+              parent_id: "root",
+              title: "H1 学习率 0.01 更好",
+              status: "refuted",
+              evidence_for: [],
+              evidence_against: [],
+            },
+          ],
+          sprints: [sprint],
+          jobs: [],
+          datasets: [],
+          docker: { available: true, reason: "" },
+          input_needed: "",
+        },
+      });
+    return route.fallback();
+  });
+  await page.goto(`/#research/${rid}`);
+  const card = page.getByRole("region", { name: "你不在时" });
+  await expect(card.getByText("同事们完成了 1 轮工作")).toBeVisible();
+  await expect(card.getByText("H1 学习率 0.01 更好 → 已否定")).toBeVisible();
+  await expect(card.getByText("花了 8万 token")).toBeVisible();
+  if (process.env.SHOT) await page.screenshot({ path: process.env.SHOT });
+  // Each line leads to where it happened.
+  await card
+    .getByRole("button", { name: "H1 学习率 0.01 更好 → 已否定" })
+    .click();
+  await expect(page.getByRole("radio", { name: "讨论" })).toBeChecked();
+  await card.getByRole("button", { name: "关闭" }).click();
+  await expect(card).toHaveCount(0);
+});
+
+test("selecting something on a research explains it in place", async ({
+  page,
+}) => {
+  await project(page);
+  const asked: { text: string; context: string }[] = [];
+  await page.route(`**/api/v1/research/projects/${rid}**`, async (route) => {
+    const path = new URL(route.request().url()).pathname;
+    if (path.endsWith("/explain")) {
+      asked.push(route.request().postDataJSON());
+      return route.fulfill({
+        json: { text: "配对 t 检验比较同一批种子上的两种设置。" },
+      });
+    }
+    if (path.endsWith("/runs") || path.endsWith("/events"))
+      return route.fulfill({ json: [] });
+    if (path.endsWith(`/projects/${rid}`))
+      return route.fulfill({
+        json: {
+          project: {
+            ...research,
+            title: "MNIST 学习率",
+            status: "active",
+            stage: "experiments",
+            background: "",
+            model_config_id: "model-1",
+            budget: {},
+            spent: { tokens: 1200 },
+            session_id: researchSession,
+            workspace_id: wid,
+            plan: null,
+            conclusion_record: {},
+            environment: {},
+            created_at: at,
+          },
+          nodes: [
+            {
+              id: "node-h1",
+              parent_id: "root",
+              title: "H1 配对t检验显著",
+              status: "active",
+              evidence_for: [],
+              evidence_against: [],
+            },
+          ],
+          sprints: [],
+          jobs: [],
+          datasets: [],
+          docker: { available: true, reason: "" },
+          input_needed: "",
+        },
+      });
+    return route.fallback();
+  });
+  await page.goto(`/#research/${rid}`);
+  await page
+    .getByText("配对t检验显著", { exact: true })
+    .click({ clickCount: 3 });
+  await page.getByRole("button", { name: "讲给我听", exact: true }).click();
+  const answer = page.getByRole("dialog", { name: "讲给我听" });
+  await expect(
+    answer.getByText("配对 t 检验比较同一批种子上的两种设置。"),
+  ).toBeVisible();
+  expect(asked[0].text).toBe("配对t检验显著");
+  expect(asked[0].context).toContain("配对t检验显著");
+  if (process.env.SHOT) await page.screenshot({ path: process.env.SHOT });
+  await page.keyboard.press("Escape");
+  await expect(answer).toHaveCount(0);
+});
+
+test("a research replays step by step and exports its timeline", async ({
+  page,
+}) => {
+  await project(page);
+  const events = [
+    {
+      id: "added",
+      node_id: "node-h1",
+      sprint_id: null,
+      actor: "advisor",
+      action: "add_node",
+      detail: { kind: "hypothesis", title: "H1 学习率 0.01 更好", reason: "" },
+      created_at: "2026-10-20T02:00:00Z",
+    },
+    {
+      id: "refuted",
+      node_id: "node-h1",
+      sprint_id: null,
+      actor: "executor",
+      action: "update_node",
+      detail: {
+        before: { status: "active" },
+        after: { status: "refuted" },
+        reason: "三个种子都没有提升",
+      },
+      created_at: "2026-10-21T03:00:00Z",
+    },
+  ];
+  await page.route(`**/api/v1/research/projects/${rid}**`, async (route) => {
+    const path = new URL(route.request().url()).pathname;
+    if (path.endsWith("/runs")) return route.fulfill({ json: [] });
+    if (path.endsWith("/events")) return route.fulfill({ json: events });
+    if (path.endsWith(`/projects/${rid}`))
+      return route.fulfill({
+        json: {
+          project: {
+            ...research,
+            title: "MNIST 学习率",
+            status: "active",
+            stage: "experiments",
+            background: "",
+            model_config_id: "model-1",
+            budget: {},
+            spent: { tokens: 1200 },
+            session_id: researchSession,
+            workspace_id: wid,
+            plan: null,
+            conclusion_record: {},
+            environment: {},
+            created_at: at,
+          },
+          nodes: [
+            {
+              id: "node-h1",
+              parent_id: "root",
+              title: "H1 学习率 0.01 更好",
+              status: "refuted",
+              evidence_for: [],
+              evidence_against: [],
+              created_at: "2026-10-20T02:00:00Z",
+            },
+          ],
+          sprints: [],
+          jobs: [],
+          datasets: [],
+          docker: { available: true, reason: "" },
+          input_needed: "",
+        },
+      });
+    return route.fallback();
+  });
+  await page.goto(`/#research/${rid}`);
+  await page.getByRole("radio", { name: "回放", exact: true }).click();
+  const replay = page.getByTestId("research-replay");
+  const timeline = replay.getByRole("list", { name: "回放" });
+  await expect(timeline.getByText("三个种子都没有提升")).toBeVisible();
+  const hypotheses = replay.getByRole("region", { name: "假设" });
+  await expect(hypotheses.getByText("已否定", { exact: true })).toBeVisible();
+  // Back to when it was proposed: it was still being tested.
+  await timeline.getByText("提出假设：H1 学习率 0.01 更好").click();
+  await expect(hypotheses.getByText("进行中", { exact: true })).toBeVisible();
+  if (process.env.SHOT) await page.screenshot({ path: process.env.SHOT });
+  const download = page.waitForEvent("download");
+  await replay.getByRole("button", { name: "导出 Markdown" }).click();
+  const file = await download;
+  expect(file.suggestedFilename()).toBe("MNIST 学习率-回放.md");
+});
+
+test("what was worked out with the advisor starts a research in a project", async ({
+  page,
+}) => {
+  const state = await project(page);
+  const personal = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
+  state.workspaces = [
+    ...state.workspaces,
+    {
+      ...state.workspaces[0],
+      id: personal,
+      name: "个人空间",
+      kind: "personal",
+    },
+  ];
+  let started: Record<string, string> | null = null;
+  await page.route("**/api/v1/research/projects", (route) => {
+    if (route.request().method() !== "POST") return route.fallback();
+    started = route.request().postDataJSON();
+    return route.fulfill({ json: { ...research, id: rid } });
+  });
+  await page.goto(`/#team/${personal}/${advisorDM}`);
+  await page.reload();
+  const start = page.getByRole("button", { name: "在项目里开始", exact: true });
+  // Only under the advisor's latest reply.
+  await expect(start).toHaveCount(1);
+  await start.click();
+  const dialog = page.getByRole("dialog", { name: "在项目里开始" });
+  await expect(dialog.getByRole("combobox", { name: "项目" })).toHaveValue(wid);
+  await expect(dialog.getByRole("textbox", { name: "研究问题" })).toHaveValue(
+    "以前的问题",
+  );
+  await dialog
+    .getByRole("textbox", { name: "研究问题" })
+    .fill("学习率是否重要");
+  await dialog.getByRole("button", { name: "开始研究", exact: true }).click();
+  await expect(page).toHaveURL((url) => url.hash === `#research/${rid}`);
+  expect(started).toMatchObject({
+    message: "学习率是否重要",
+    workspace_id: wid,
+    model_config_id: "model-1",
+  });
+  // The conversation goes along as background: nothing has to be said twice.
+  expect(started!.background).toContain("第一项研究正在等待计划批准");
+  expect(started!.background).toContain("以前的回答");
+});

@@ -53,14 +53,15 @@
   background: color-mix(in oklab, var(--ui-primary) 88%, var(--ui-bg));
 }
 
+/* Secondary is a hairline outline on whatever it sits on: the same on a card, a page or a panel. */
 .secondary {
-  background: var(--ui-fill);
+  background: transparent;
   color: var(--ui-fg);
-  box-shadow: inset 0 0 0 1px var(--ui-edge-subtle);
+  box-shadow: inset 0 0 0 1px var(--ui-edge-strong);
 }
 
 .secondary:hover:not(:disabled) {
-  background: var(--ui-selected);
+  background: var(--ui-hover);
 }
 
 .ghost {
@@ -95,7 +96,7 @@
 /* Keeps its hairline under the ring. */
 .secondary:focus-visible {
   box-shadow:
-    inset 0 0 0 1px var(--ui-edge-subtle),
+    inset 0 0 0 1px var(--ui-edge-strong),
     var(--ui-focus-ring);
 }
 

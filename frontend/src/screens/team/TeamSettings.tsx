@@ -1,6 +1,6 @@
 import { Members } from "./Members";
-import { memberName } from "./member-model";
-import { defaultChannelNames } from "../research/team-model";
+import { memberAvatarSeed, memberName } from "./member-model";
+import { groupName } from "../research/team-model";
 import { useEffect, useRef, useState } from "react";
 import { useI18n } from "../../i18n/I18nProvider";
 import type { MessageKey } from "../../i18n/i18n";
@@ -29,6 +29,9 @@ export const workflowMembers = (
   team.members.map((m) => ({
     id: m.id,
     name: memberName(m, name),
+    avatar: m.avatar,
+    avatar_url: m.avatar_url,
+    avatar_seed: memberAvatarSeed(m),
     ...(m.enabled !== undefined
       ? { enabled: m.enabled && !m.deleted, subscriptions: m.subscriptions }
       : {}),
@@ -184,10 +187,7 @@ export function TeamSettings({
               members={workflowMembers(team, t)}
               channels={team.channels.map((c) => ({
                 id: c.id,
-                name:
-                  defaultChannelNames[c.key] === c.name
-                    ? t(`team.channel.${c.key}` as MessageKey)
-                    : c.name,
+                name: groupName(c, t),
                 kind: c.member_id ? "dm" : "channel",
               }))}
               runtime={historical ? undefined : team.runtime}

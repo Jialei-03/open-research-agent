@@ -226,7 +226,7 @@ def best(d, project):
     return {"name": found[0], "value": found[1]} if found else None
 
 
-def _open_requests(d, project):
+def _open_requests(d, project, blocking=False):
     rows = list(
         d.scalars(
             select(ResearchEvent).where(
@@ -239,7 +239,12 @@ def _open_requests(d, project):
         r.detail.get("request_id") for r in rows if r.action == "human_decision"
     }
     return [
-        r for r in rows if r.action == "decision_requested" and r.id not in answered
+        r
+        for r in rows
+        if r.action == "decision_requested"
+        and r.id not in answered
+        # A check-in is told, not waited on: it does not hold anything up.
+        and not (blocking and r.detail.get("kind") == "checkin")
     ]
 
 
@@ -258,7 +263,7 @@ def _waits_for_reply(d, project):
 def research_column(d, project):
     if project.status == "finished":
         return "dropped" if project.end_reason == "stopped" else "done"
-    if project.status == "waiting" or _open_requests(d, project):
+    if project.status == "waiting" or _open_requests(d, project, blocking=True):
         return "review"
     if project.status == "paused":
         return "todo"
@@ -443,7 +448,11 @@ def board(d, workspace):
                 "updated_at": project.updated_at,
             }
         )
-        asked = {r.node_id for r in _open_requests(d, project) if r.node_id}
+        asked = {
+            r.node_id
+            for r in _open_requests(d, project, blocking=True)
+            if r.node_id
+        }
         for node in research_map.nodes(d, project):
             if node.parent_id is None or node.kind not in {
                 "hypothesis",

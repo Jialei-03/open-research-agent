@@ -2,8 +2,6 @@ import {
   Compass,
   FlaskConical,
   SquarePen,
-  Folder,
-  FileText,
   House,
   Library,
   LogOut,
@@ -15,6 +13,7 @@ import {
   Plus,
   SlidersHorizontal,
   type LucideIcon,
+  Users,
 } from "lucide-react";
 import {
   createContext,
@@ -27,7 +26,7 @@ import {
 } from "react";
 import type { Paper } from "../api";
 import { useI18n } from "../i18n/I18nProvider";
-import { followLink, readerHash } from "../reader/route";
+import { followLink } from "../reader/route";
 import {
   ariaKeyShortcuts,
   currentPlatformIsMac,
@@ -45,7 +44,7 @@ import {
 } from "../ui";
 import {
   TeamNavigation,
-  TeamSwitcher,
+  ProjectHeader,
 } from "../screens/research/TeamNavigation";
 import { parseAppRoute, type AppScreen } from "./routes";
 import {
@@ -53,20 +52,16 @@ import {
   readSectionAddresses,
   validSectionAddress,
 } from "./local-sections";
-import { SectionNavigation } from "./SectionNavigation";
+import { RecentReading, SectionNavigation } from "./SectionNavigation";
+import { sidebarId, type SidebarEntryId } from "./sidebar-entries";
 import { ScheduleNavigation } from "../screens/schedules/ScheduleCenter";
 import styles from "./AppSidebar.module.css";
+import { ProjectRail } from "./ProjectRail";
 import { useLocal } from "./edition";
-import {
-  ResearchNotifications,
-  useResearchNavigation,
-} from "../screens/research/ResearchNavigation";
+import { useResearchNavigation } from "../screens/research/ResearchNavigation";
 
 /** Opens quick open, from anywhere in the app. */
 export const QUICK_OPEN_SHORTCUT = "mod+k";
-
-/** How many of the papers read last the sidebar lists. */
-const READING_LIMIT = 5;
 
 /**
  * What the app around a screen offers its sidebar: quick open and signing out.
@@ -167,11 +162,9 @@ export function AppSidebar({
       ids.unshift(paperId);
     return ids
       .filter((id) => titles.has(id))
-      .slice(0, READING_LIMIT)
       .map((id) => ({ id, title: titles.get(id) || t("reader.untitled") }));
   }, [papers, current, visits, paperId, t]);
 
-  const reader = screen === "reader";
   const materials = ["library", "discover", "reader", "open"].includes(screen);
   // Only the icons are left of a rail: the search is then an item like the others.
   const rail = floating ? !opened : collapsed;
@@ -193,6 +186,8 @@ export function AppSidebar({
     );
   return (
     <Sidebar
+      data-sidebar-place="hosted"
+      collapseId={sidebarId("hosted-collapse")}
       label={t("reader.region.sidebar")}
       collapsed={floating ? !opened : collapsed}
       onCollapsedChange={(shut) =>
@@ -203,13 +198,15 @@ export function AppSidebar({
       footer={
         <>
           <SidebarItem
+            data-id={sidebarId("hosted-models")}
             icon={SlidersHorizontal}
             label={t("customize.models")}
-            href="#customize/models"
-            active={screen === "customize"}
-            onClick={followLink(go, "customize/models")}
+            href="#settings/models"
+            active={screen === "settings"}
+            onClick={followLink(go, "settings/models")}
           />
           <SidebarItem
+            data-id={sidebarId("hosted-settings")}
             icon={Settings}
             label={t("reader.sidebar.settings")}
             href="#settings"
@@ -217,11 +214,14 @@ export function AppSidebar({
             onClick={followLink(go, "settings")}
           />
           {signOut && (
-            <SidebarItem
-              icon={LogOut}
-              label={t("app.signOut")}
-              onClick={signOut}
-            />
+            <div data-sidebar-place="account">
+              <SidebarItem
+                data-id={sidebarId("sign-out")}
+                icon={LogOut}
+                label={t("app.signOut")}
+                onClick={signOut}
+              />
+            </div>
           )}
         </>
       }
@@ -230,6 +230,7 @@ export function AppSidebar({
         {quickOpen &&
           (rail ? (
             <SidebarItem
+              data-id={sidebarId("hosted-search")}
               icon={Search}
               label={t(local ? "app.quickOpen.all" : "app.quickOpen")}
               meta={formatShortcut(QUICK_OPEN_SHORTCUT, currentPlatformIsMac())}
@@ -239,6 +240,7 @@ export function AppSidebar({
             <button
               type="button"
               className={styles.search}
+              data-id={sidebarId("hosted-search")}
               aria-label={t(local ? "app.quickOpen.all" : "app.quickOpen")}
               aria-keyshortcuts={ariaKeyShortcuts(
                 QUICK_OPEN_SHORTCUT,
@@ -268,6 +270,7 @@ export function AppSidebar({
         ) : (
           <>
             <SidebarItem
+              data-id={sidebarId("home")}
               icon={House}
               label={t("app.home")}
               href="#home"
@@ -275,6 +278,7 @@ export function AppSidebar({
               onClick={followLink(go, "home")}
             />
             <SidebarItem
+              data-id={sidebarId("hosted-library")}
               icon={Library}
               label={t("reader.sidebar.library")}
               href="#library"
@@ -282,6 +286,7 @@ export function AppSidebar({
               onClick={followLink(go, "library")}
             />
             <SidebarItem
+              data-id={sidebarId("hosted-discover")}
               icon={Compass}
               label={t("app.discover")}
               href="#discover"
@@ -292,6 +297,7 @@ export function AppSidebar({
         )}
         {local === false && (
           <SidebarItem
+            data-id={sidebarId("hosted-research")}
             icon={FlaskConical}
             label={t("app.research")}
             href="#new"
@@ -300,24 +306,13 @@ export function AppSidebar({
           />
         )}
       </SidebarSection>
-      {!materials && reading.length > 0 && (
-        <SidebarSection title={t("reader.sidebar.reading")}>
-          {reading.map(({ id, title }) => {
-            const hash = readerHash({ paperId: id });
-            const here = reader && id === paperId;
-            return (
-              <SidebarItem
-                key={id}
-                icon={FileText}
-                label={title}
-                href={hash}
-                active={here}
-                dot={here}
-                onClick={followLink(go, hash.slice(1))}
-              />
-            );
-          })}
-        </SidebarSection>
+      {!materials && (
+        <RecentReading
+          reading={reading}
+          route={route}
+          hash={contextHash ?? window.location.hash.slice(1)}
+          go={go}
+        />
       )}
     </Sidebar>
   );
@@ -368,6 +363,7 @@ function AppResearchSidebar({
     remembered.current[key] ||
     {
       research: newResearchHash,
+      colleagues: "colleagues",
       materials: "library",
       tasks: "schedules",
       customize: "customize/playbook",
@@ -376,7 +372,7 @@ function AppResearchSidebar({
   const nav = useRef<HTMLElement>(null);
   const sizing = useResizableWidth({
     key: `research-sidebar-width:${owner || ""}`,
-    fallback: 288,
+    fallback: 264,
     min: 240,
     maxFor: researchSidebarMax,
   });
@@ -420,6 +416,7 @@ function AppResearchSidebar({
     };
   }, [collapsed, floating, onCollapsedChange]);
   const railLink = (
+    id: SidebarEntryId,
     Icon: LucideIcon,
     label: string,
     hash: string,
@@ -428,12 +425,13 @@ function AppResearchSidebar({
     <Tooltip content={label} placement={{ side: "right", align: "center" }}>
       <a
         className={styles.railItem}
+        data-id={sidebarId(id)}
         href={`#${hash}`}
         aria-label={label}
         aria-current={active ? "page" : undefined}
         onClick={followLink(choose, hash)}
       >
-        <Icon size={16} aria-hidden />
+        <Icon size={18} aria-hidden />
       </a>
     </Tooltip>
   );
@@ -445,9 +443,10 @@ function AppResearchSidebar({
       data-floating={floating || undefined}
       data-collapsed={collapsed || undefined}
     >
-      <div className={styles.researchRail}>
+      <div className={styles.researchRail} data-sidebar-place="rail">
         <IconButton
           className={styles.railToggle}
+          data-id={sidebarId("collapse")}
           icon={collapsed ? PanelLeftOpen : PanelLeftClose}
           label={t(collapsed ? "sidebar.expand" : "sidebar.collapse")}
           shortcut="mod+\\"
@@ -456,68 +455,59 @@ function AppResearchSidebar({
           onClick={() => onCollapsedChange(!collapsed)}
         />
         <div className={styles.railDestinations}>
+          <ProjectRail
+            hash={contextHash}
+            section={section}
+            restore={remembered.current.research}
+            go={choose}
+          />
           {railLink(
-            House,
-            t("app.section.research"),
-            destination("research"),
-            section === "research",
+            "colleagues",
+            Users,
+            t("app.section.colleagues"),
+            destination("colleagues"),
+            section === "colleagues",
           )}
           {railLink(
+            "materials",
             Library,
             t("app.section.materials"),
             destination("materials"),
             section === "materials",
           )}
           {railLink(
+            "tasks",
             Clock3,
             t("app.section.tasks"),
             destination("tasks"),
             section === "tasks",
           )}
           {railLink(
+            "customize",
             SlidersHorizontal,
             t("app.section.customize"),
             destination("customize"),
             section === "customize",
           )}
-          {collapsed &&
-            railLink(
-              SquarePen,
-              t("projects.newResearch"),
-              newResearchHash,
-              screen === "new-research",
-            )}
-          {collapsed &&
-            railLink(
-              Folder,
-              t("workspace.workspaces"),
-              "workspaces",
-              screen === "workspaces",
-            )}
-          {collapsed && quickOpen && (
-            <IconButton
-              className={styles.railItem}
-              icon={Search}
-              label={t("app.quickOpen.all")}
-              shortcut={QUICK_OPEN_SHORTCUT}
-              onClick={quickOpen}
-            />
-          )}
         </div>
         <div className={styles.railFooter}>
           {railLink(
+            "settings",
             Settings,
             t("reader.sidebar.settings"),
             "settings",
             screen === "settings",
           )}
           {signOut && (
-            <IconButton
-              className={styles.railItem}
-              icon={LogOut}
-              label={t("app.signOut")}
-              onClick={signOut}
-            />
+            <div data-sidebar-place="account">
+              <IconButton
+                data-id={sidebarId("sign-out")}
+                className={styles.railItem}
+                icon={LogOut}
+                label={t("app.signOut")}
+                onClick={signOut}
+              />
+            </div>
           )}
         </div>
       </div>
@@ -531,16 +521,21 @@ function AppResearchSidebar({
               } as CSSProperties
             }
           >
-            <div className={styles.researchBrandRow}>
+            <div
+              className={styles.researchBrandRow}
+              data-sidebar-place={
+                section === "research" ? "research" : undefined
+              }
+            >
               {section === "research" ? (
-                <TeamSwitcher hash={contextHash} go={choose} />
+                <ProjectHeader hash={contextHash} go={choose} />
               ) : (
                 <h2 className={styles.sectionTitle}>{title}</h2>
               )}
-              {section === "research" && <ResearchNotifications go={choose} />}
               {quickOpen && (
                 <IconButton
                   className={styles.researchSearch}
+                  data-id={sidebarId("search")}
                   icon={Search}
                   label={t("app.quickOpen.all")}
                   shortcut={QUICK_OPEN_SHORTCUT}
@@ -552,9 +547,10 @@ function AppResearchSidebar({
               )}
             </div>
             {section === "tasks" ? (
-              <div className={styles.taskNavigation}>
+              <div className={styles.taskNavigation} data-sidebar-place="tasks">
                 <div className={styles.taskNew}>
                   <SidebarItem
+                    data-id={sidebarId("new-task")}
                     icon={Plus}
                     label={t("schedules.new")}
                     active={
@@ -572,17 +568,12 @@ function AppResearchSidebar({
                 />
               </div>
             ) : (
-              <div className={styles.researchScroll}>
+              <div
+                className={styles.researchScroll}
+                data-sidebar-place={section}
+              >
                 {section === "research" ? (
                   <>
-                    <div className={styles.researchActions}>
-                      <SidebarItem
-                        icon={SquarePen}
-                        label={t("projects.newResearch")}
-                        href={`#${newResearchHash}`}
-                        onClick={followLink(choose, newResearchHash)}
-                      />
-                    </div>
                     <TeamNavigation hash={contextHash} go={choose} />
                   </>
                 ) : (
@@ -603,7 +594,7 @@ function AppResearchSidebar({
               width={sizing.width}
               min={240}
               max={sizing.max}
-              fallback={288}
+              fallback={264}
               maxNow={() => researchSidebarMax(window.innerWidth)}
               property="--research-sidebar-width"
               label={t("sidebar.resize")}

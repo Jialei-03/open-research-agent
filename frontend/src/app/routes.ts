@@ -39,13 +39,7 @@ export type AppRoute =
     }
   | {
       screen: "customize";
-      section:
-        | "playbook"
-        | "roles"
-        | "machines"
-        | "tracking"
-        | "models"
-        | "workflows";
+      section: "playbook" | "roles" | "workflows";
       redirect?: string;
     }
   | {
@@ -63,6 +57,9 @@ export type AppRoute =
       item?: string;
       redirect?: string;
     }
+  | { screen: "inbox"; workspaceId?: string; redirect?: string }
+  | { screen: "all-projects"; redirect?: string }
+  | { screen: "colleagues"; colleague?: string; redirect?: string }
   | { screen: "open"; url: string; redirect?: string }
   | { screen: "reader"; reader: ReaderRoute; redirect?: string };
 
@@ -89,16 +86,18 @@ export function parseAppRoute(hash: string): AppRoute {
   if (path === "settings") return { screen: "settings" };
   if (path.startsWith("settings/")) {
     const category = path.slice("settings/".length);
-    const moved = {
-      models: "models",
-      environments: "machines",
-      tracking: "tracking",
-      playbook: "playbook",
-    } as const;
-    if (Object.hasOwn(moved, category)) {
-      const section = moved[category as keyof typeof moved];
-      return { screen: "customize", section, redirect: `customize/${section}` };
-    }
+    if (category === "playbook")
+      return {
+        screen: "customize",
+        section: "playbook",
+        redirect: "customize/playbook",
+      };
+    if (category === "machines")
+      return {
+        screen: "settings",
+        category: "environments",
+        redirect: "settings/environments",
+      };
     return /^[a-z]{1,20}$/.test(category)
       ? { screen: "settings", category }
       : { screen: "settings", redirect: "settings" };
@@ -129,12 +128,19 @@ export function parseAppRoute(hash: string): AppRoute {
   }
   if (path === "customize" || path.startsWith("customize/")) {
     const section = path.slice("customize/".length);
-    return section === "models" ||
-      section === "playbook" ||
+    // Models, machines and tracking are the app's connections, in settings.
+    const moved = {
+      models: "models",
+      machines: "environments",
+      tracking: "tracking",
+    } as const;
+    if (Object.hasOwn(moved, section)) {
+      const category = moved[section as keyof typeof moved];
+      return { screen: "settings", category, redirect: `settings/${category}` };
+    }
+    return section === "playbook" ||
       section === "roles" ||
-      section === "workflows" ||
-      section === "machines" ||
-      section === "tracking"
+      section === "workflows"
       ? { screen: "customize", section }
       : {
           screen: "customize",
@@ -148,7 +154,7 @@ export function parseAppRoute(hash: string): AppRoute {
     return uuid(workspaceId) &&
       (!channelId ||
         uuid(channelId) ||
-        ["threads", "mentions", "settings"].includes(channelId))
+        ["threads", "mentions", "work", "settings"].includes(channelId))
       ? {
           screen: "team",
           workspaceId,
@@ -157,6 +163,19 @@ export function parseAppRoute(hash: string): AppRoute {
           full: params.get("full") === "1",
         }
       : { screen: "new-research", redirect: "new" };
+  }
+  if (path === "all") return { screen: "all-projects" };
+  if (path === "colleagues") return { screen: "colleagues" };
+  if (path.startsWith("colleagues/")) {
+    const colleague = decodeURIComponent(path.slice("colleagues/".length));
+    return /^(?:[a-z]{1,20}|lib:[0-9a-f-]{36})$/.test(colleague)
+      ? { screen: "colleagues", colleague }
+      : { screen: "colleagues", redirect: "colleagues" };
+  }
+  if (path === "inbox") {
+    const workspaceId =
+      new URLSearchParams(hash.split("?")[1] || "").get("workspace") || "";
+    return { screen: "inbox", ...(uuid(workspaceId) ? { workspaceId } : {}) };
   }
   if (path === "new") {
     const params = new URLSearchParams(hash.split("?")[1] || "");

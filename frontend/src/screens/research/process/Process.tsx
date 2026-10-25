@@ -19,7 +19,7 @@ import { memo, useEffect, useState, type ReactNode } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { useI18n } from "../../../i18n/I18nProvider";
-import type { MessageKey } from "../../../i18n/i18n";
+import type { MessageKey, PluralBase } from "../../../i18n/i18n";
 import { fadeTail, useSmoothText } from "../../../reader/stream";
 import type { Agent } from "../scene/frames";
 import { Mascot } from "../scene/Mascot";
@@ -260,6 +260,9 @@ function StepRow({ row }: { row: Row }) {
  * complete once the step exists: only the words still being written (the
  * run's response, shown after the trail) flow in.
  */
+/** How many of a working turn's steps show before the earlier ones fold. */
+const LIVE_STEPS = 3;
+
 export function Trail({ steps }: { steps: RunStep[]; live?: boolean }) {
   const segments = segment(steps);
   return (
@@ -291,9 +294,9 @@ export function SummaryLine({
   open: boolean;
   onToggle(): void;
 }) {
-  const { t } = useI18n();
+  const { t, tn } = useI18n();
   const parts = summary(steps).map(([kind, n]) =>
-    t(`research.process.sum.${kind}` as MessageKey, { n }),
+    tn(`research.process.sum.${kind}` as PluralBase, n),
   );
   const label =
     status === "failed"
@@ -343,7 +346,10 @@ export function RunTurn({
   const { t } = useI18n();
   const live = !!run && isLive(run);
   const [open, setOpen] = useState(false);
+  const [earlier, setEarlier] = useState(false);
   const steps = run?.steps ?? [];
+  // At work, the latest few steps say what is happening; the rest fold above them.
+  const hidden = live && !earlier ? Math.max(0, steps.length - LIVE_STEPS) : 0;
   const lastSaid = [...steps].reverse().find((s) => s.said)?.said ?? "";
   // While it writes, the words in progress are the response, unless the last step already shows them.
   const writing =
@@ -364,7 +370,18 @@ export function RunTurn({
       )}
       {live ? (
         <>
-          <Trail steps={steps} live />
+          {hidden > 0 && (
+            <button
+              type="button"
+              className={styles.summary}
+              aria-expanded={false}
+              onClick={() => setEarlier(true)}
+            >
+              <ChevronRight size={13} className={styles.chevron} aria-hidden />
+              {t("research.process.earlier", { n: hidden })}
+            </button>
+          )}
+          <Trail steps={steps.slice(hidden)} live />
           {writing && <Words text={writing} live />}
           {steps.length === 0 && !writing && (
             <p className={`${styles.pending} ${styles.sweep}`}>
@@ -384,6 +401,7 @@ export function RunTurn({
             aria-expanded={open}
             onClick={() => setOpen(!open)}
           >
+            <ChevronRight size={13} className={styles.chevron} aria-hidden />
             {t("research.turn.elapsed", {
               time: clock(
                 run?.runtime?.execution_seconds ??
@@ -395,21 +413,19 @@ export function RunTurn({
                     : 0),
               ),
             })}
-            <ChevronRight size={13} className={styles.chevron} aria-hidden />
           </button>
           {open && <Trail steps={steps} live={false} />}
           {final && <Words text={final.replaceAll("\\n", "\n")} live={false} />}
-          {steps.length === 0 &&
-            (run?.status === "cancelled" ||
-              (run?.status === "failed" && !run.error)) && (
-              <p className={styles.pending}>
-                {t(
-                  run.status === "failed"
-                    ? "research.process.failed"
-                    : "research.process.cancelled",
-                )}
-              </p>
-            )}
+          {(run?.status === "cancelled" ||
+            (run?.status === "failed" && !run.error)) && (
+            <p className={styles.pending}>
+              {t(
+                run.status === "failed"
+                  ? "research.process.failed"
+                  : "research.process.cancelled",
+              )}
+            </p>
+          )}
           {run?.status === "failed" && run.error && (
             <p className={styles.error}>{run.error}</p>
           )}

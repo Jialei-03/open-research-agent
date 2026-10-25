@@ -173,7 +173,10 @@ def test_organization_only_changes_metadata_and_board_is_explicit(env):
     assert (
         len(cards) == 1 and cards[0]["id"] == p["id"] and cards[0]["type"] == "research"
     )
-    assert b.get(BASE + "/navigation").json() == {"workspaces": [], "collections": []}
+    # Another researcher sees only their own personal space.
+    theirs = b.get(BASE + "/navigation").json()
+    assert theirs["collections"] == []
+    assert [w["kind"] for w in theirs["workspaces"]] == ["personal"]
     assert (
         b.patch(
             f"{BASE}/projects/{p['id']}/organization", json={"on_board": False}

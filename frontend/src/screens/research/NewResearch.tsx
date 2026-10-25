@@ -4,12 +4,19 @@ import { AppActions } from "../../app/AppSidebar";
 import { useI18n } from "../../i18n/I18nProvider";
 import { Button, IconButton, toast } from "../../ui";
 import { readModels, type ModelRow } from "../setup/model-api";
+import { useModelRevision } from "../setup/useModelRevision";
 import { refreshResearchNavigation } from "./navigation-api";
+import type { SlashCommand } from "../../lib/slash";
+import {
+  readWorkflows,
+  workflowName,
+  type Workflow,
+} from "../workflows/workflows-api";
 import { useResearchNavigation } from "./ResearchNavigation";
-import { getTeam, teamHash } from "./team-api";
+import { getTeam, sendTeamMessage, teamHash } from "./team-api";
 import { resumeProject, startProject } from "./research-api";
 import { Composer } from "./talk/Composer";
-import { WorkflowPicker } from "../workflows/WorkflowPicker";
+import { NewRecent } from "./NewRecent";
 import { ModelPicker } from "./talk/Pickers";
 import { WorkspacePicker } from "./WorkspaceDialogs";
 import { uploadToWorkspace, mention } from "./files/files-api";
@@ -40,8 +47,10 @@ export function NewResearch({
   );
   const [collection, setCollection] = useState(collectionId || "");
   const pendingWorkspace = useRef("");
+  // The personal space is not a project: research is started in a project.
   const current = data.workspaces.find(
-    (item) => item.id === workspace && !item.archived,
+    (item) =>
+      item.id === workspace && !item.archived && item.kind !== "personal",
   );
   const unavailable =
     ready &&
@@ -111,6 +120,9 @@ export function NewResearch({
           workspaceId={current?.id || ""}
           collectionId={collection || null}
           defaultModelId={current?.model_config_id || ""}
+          personalId={
+            data.workspaces.find((item) => item.kind === "personal")?.id || ""
+          }
           go={go}
           context={
             <>
@@ -130,6 +142,7 @@ export function NewResearch({
           </p>
         )}
       </div>
+      <NewRecent go={go} />
     </main>
   );
 }
@@ -142,8 +155,11 @@ function FirstMessage({
   go,
   context,
   defaultModelId,
+  personalId,
 }: {
   defaultModelId: string;
+  /** With no project chosen, the words go to the advisor in the personal space, as to a colleague. */
+  personalId: string;
   context: ReactNode;
   draftKey: string;
   legacyDraftKey: string;
@@ -157,6 +173,25 @@ function FirstMessage({
   );
   const migratedDraft = useRef(stored(draftKey) ? "" : legacyDraftKey);
   const [workflowId, setWorkflowId] = useState("research");
+  // "/" offers the workflows: a task named after one is done that way.
+  const [workflows, setWorkflows] = useState<Workflow[]>([]);
+  useEffect(() => {
+    let stale = false;
+    readWorkflows(workspaceId || undefined).then(
+      (value) => !stale && setWorkflows(value),
+      () => undefined,
+    );
+    return () => {
+      stale = true;
+    };
+  }, [workspaceId]);
+  const commands: SlashCommand[] = workflows.map((item) => ({
+    name: workflowName(item, t),
+    description: (item.steps ?? []).map((step) => step.name).join(" → "),
+    group: "workflow",
+    takesArgument: true,
+    run: (task) => send(task, item.id),
+  }));
   useEffect(() => {
     if (!workspaceId) return;
     let stale = false;
@@ -185,6 +220,7 @@ function FirstMessage({
   const picker = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const modelRevision = useModelRevision();
   useEffect(() => {
     let cancelled = false;
     readModels().then(
@@ -201,7 +237,6 @@ function FirstMessage({
       },
       (reason: unknown) => {
         if (!cancelled) {
-          setModelKnown(true);
           setError(reason instanceof Error ? reason.message : String(reason));
         }
       },
@@ -209,7 +244,7 @@ function FirstMessage({
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [modelRevision]);
   useEffect(() => {
     try {
       if (text) localStorage.setItem(draftKey, text);
@@ -230,20 +265,45 @@ function FirstMessage({
       /* Optional preference. */
     }
   }, [draftKey, modelId]);
-  const send = async () => {
-    if (!workspaceId || !modelId || !text.trim() || busy) return;
+  /** A message, or the task after a "/workflow" command, which names the way it is done. */
+  const send = async (words = text, chosen?: string) => {
+    if ((!workspaceId && !personalId) || !modelId || !words.trim() || busy)
+      return;
     setBusy(true);
     setError("");
     let createdId = "";
+    const target = workspaceId;
     try {
+      // A workflow is work in a project.
+      if (chosen && !target) throw new Error(t("workflows.needsProject"));
+      if (!target) {
+        // Not a research yet: a word to the advisor, who proposes a project when one is needed.
+        if (files.length) throw new Error(t("workspace.choose"));
+        const team = await getTeam(personalId);
+        const dm = team.channels.find((c) => c.key === "dm:advisor");
+        if (!dm) throw new Error(t("workspace.notFound"));
+        await sendTeamMessage(personalId, dm.id, {
+          text: words.trim(),
+          mode: "queue",
+          client_id: crypto.randomUUID(),
+        });
+        try {
+          localStorage.removeItem(draftKey);
+          localStorage.removeItem(legacyDraftKey);
+        } catch {
+          /* Optional cache. */
+        }
+        go(teamHash(personalId, dm.id));
+        return;
+      }
       const research = await startProject({
         message:
-          text.trim() +
+          words.trim() +
           (files.length
             ? "\n" + files.map((file) => mention(file.name)).join(" ")
             : ""),
-        workflow_id: workflowId,
-        workspace_id: workspaceId,
+        workflow_id: chosen || workflowId,
+        workspace_id: target,
         collection_id: collectionId,
         model_config_id: modelId,
         ...(files.length ? { defer_start: true } : {}),
@@ -261,14 +321,7 @@ function FirstMessage({
         /* Optional cache. */
       }
       refreshResearchNavigation();
-      const team = await getTeam(workspaceId);
-      go(
-        teamHash(
-          workspaceId,
-          team.channels.find((c) => c.key === "experiments")!.id,
-          `research:${research.id}`,
-        ),
-      );
+      go(`research/${research.id}`);
     } catch (reason) {
       const message = reason instanceof Error ? reason.message : String(reason);
       if (createdId) {
@@ -311,28 +364,25 @@ function FirstMessage({
       <Composer
         value={text}
         onChange={setText}
-        onSend={send}
+        onSend={() => void send()}
+        commands={commands}
         label={t("workspace.firstMessage")}
         placeholder=""
         sendLabel={t("research.home.send")}
         busy={busy}
         disabled={busy}
-        sendDisabled={!workspaceId || !modelId}
+        sendDisabled={(!workspaceId && !personalId) || !modelId}
+        needsModel={modelKnown && models.length === 0}
         leading={
           <>
             <IconButton
               icon={Plus}
+              className={styles.plus}
               label={t("research.attach")}
               size="sm"
               onClick={() => picker.current?.click()}
             />
             {context}
-            <WorkflowPicker
-              workspaceId={workspaceId || undefined}
-              value={workflowId}
-              onChange={setWorkflowId}
-              disabled={busy}
-            />
           </>
         }
         tools={
@@ -348,11 +398,6 @@ function FirstMessage({
         }
         autoFocus
       />
-      {modelKnown && !modelId && (
-        <Button size="sm" variant="ghost" onClick={() => go("settings/models")}>
-          {t("workspace.configureModel")}
-        </Button>
-      )}
       {error && (
         <p className={styles.error} role="alert">
           {error}

@@ -1,0 +1,159 @@
+import { Plus, Sparkle } from "lucide-react";
+import { useContext } from "react";
+import { AppActions } from "../../app/AppSidebar";
+import { parseAppRoute } from "../../app/routes";
+import { sidebarId } from "../../app/sidebar-entries";
+import {
+  MESSAGE_FIRST,
+  pageRows,
+  sidebarPageKey,
+  SidebarPagination,
+  useSidebarPage,
+} from "../../app/sidebar-pagination";
+import { useI18n } from "../../i18n/I18nProvider";
+import { followLink } from "../../reader/route";
+import { IconButton, Spinner } from "../../ui";
+import type { NavigationResearch } from "./navigation-api";
+import { useResearchNavigation } from "./ResearchNavigation";
+import { statusOf } from "./status";
+import { threadDate } from "./team-model";
+import nav from "./TeamNavigation.module.css";
+
+/**
+ * The current project's researches, as Claude lists conversations: one line
+ * each, latest first, with a single state at its end — a spinner while it
+ * runs, "waiting" when it needs the researcher.
+ */
+export function SidebarResearches({
+  workspaceId,
+  hash,
+  go,
+}: {
+  workspaceId: string;
+  hash: string;
+  go(hash: string): void;
+}) {
+  const { t, locale } = useI18n();
+  const { owner = "" } = useContext(AppActions);
+  const { data } = useResearchNavigation();
+  const [limit, choose] = useSidebarPage(
+    sidebarPageKey(owner, workspaceId, "researches"),
+    MESSAGE_FIRST,
+  );
+  const route = parseAppRoute(hash);
+  const currentId =
+    route.screen === "research"
+      ? route.projectId
+      : route.screen === "team" && route.threadId?.startsWith("research:")
+        ? route.threadId.slice("research:".length)
+        : undefined;
+  const researches = (
+    data.workspaces.find((w) => w.id === workspaceId)?.researches || []
+  )
+    .filter((r) => !r.archived_at)
+    .sort(
+      (a, b) =>
+        (Date.parse(b.updated_at) || 0) - (Date.parse(a.updated_at) || 0),
+    );
+  const waiting = (r: NavigationResearch) => statusOf(r).tone === "review";
+  const { rows, hidden } = pageRows(
+    researches,
+    limit,
+    (r) => r.id === currentId || !!r.working || waiting(r),
+  );
+  // A new research starts where the open one is: its project and its classification.
+  const collectionId =
+    data.workspaces
+      .find((w) => w.id === workspaceId)
+      ?.researches.find((r) => r.id === currentId)?.collection_id ||
+    (route.screen === "research-collections" || route.screen === "new-research"
+      ? route.collectionId
+      : undefined);
+  const newHash = `new?${new URLSearchParams({
+    workspace: workspaceId,
+    ...(collectionId && collectionId !== "unclassified"
+      ? { collection: collectionId }
+      : {}),
+  })}`;
+  return (
+    <section
+      data-sidebar-place="researches"
+      aria-labelledby="sidebar-researches"
+    >
+      <div className={nav.heading}>
+        <span id="sidebar-researches">{t("sidebar.researches")}</span>
+        <IconButton
+          data-id={sidebarId("research-new")}
+          icon={Plus}
+          label={t("projects.newResearch")}
+          onClick={() => go(newHash)}
+        />
+      </div>
+      <div className={nav.conversations}>
+        {rows.map((r) => {
+          const target = `research/${r.id}`;
+          return (
+            <a
+              key={r.id}
+              className={nav.conversation}
+              data-id={sidebarId("research-row")}
+              href={`#${target}`}
+              title={r.question}
+              aria-label={r.title || r.question}
+              aria-current={r.id === currentId ? "page" : undefined}
+              onClick={followLink(go, target)}
+            >
+              <span className={nav.researchMark} aria-hidden="true">
+                <Sparkle size={15} />
+              </span>
+              <span className={nav.content}>
+                <span className={nav.line}>
+                  <span className={nav.name}>{r.title || r.question}</span>
+                  <time dateTime={r.updated_at}>
+                    {threadDate(
+                      r.updated_at,
+                      locale,
+                      new Date(),
+                      "conversation",
+                    )}
+                  </time>
+                </span>
+                <span className={nav.line}>
+                  <span
+                    className={nav.preview}
+                    data-working={r.working ? true : undefined}
+                    data-waiting={waiting(r) || undefined}
+                  >
+                    {r.working ? (
+                      <>
+                        <Spinner size={14} /> {t(statusOf(r).key)}
+                      </>
+                    ) : waiting(r) ? (
+                      t("sidebar.waiting")
+                    ) : (
+                      r.conclusion || r.said || t(statusOf(r).key)
+                    )}
+                  </span>
+                  {r.unread && !r.working && !waiting(r) && (
+                    <span
+                      className={nav.researchDot}
+                      role="img"
+                      aria-label={t("research.unread")}
+                    />
+                  )}
+                </span>
+              </span>
+            </a>
+          );
+        })}
+        <SidebarPagination
+          list="researches"
+          first={MESSAGE_FIRST}
+          limit={limit}
+          hidden={hidden}
+          choose={choose}
+        />
+      </div>
+    </section>
+  );
+}

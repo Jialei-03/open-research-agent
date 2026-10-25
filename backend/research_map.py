@@ -264,6 +264,12 @@ def update_node(
         {"before": before, "after": after, "reason": reason.strip()},
         sprint_id,
     )
+    if "status" in after:
+        from .research_callme import hypothesis_settled
+
+        hypothesis_settled(
+            d, project, node, before["status"], after["status"], sprint_id
+        )
     return node
 
 

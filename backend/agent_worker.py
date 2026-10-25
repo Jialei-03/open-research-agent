@@ -224,6 +224,11 @@ def _process(app, job_id, cfg):
             r.context = research_chat.context(d, workspace, app.state.settings)
             d.commit()
         cfg = {**cfg, **(r.runtime or {}).get("model_options", {})}
+        # A colleague's effort the model cannot take falls back to its default.
+        from .model_options import controls
+
+        if cfg.get("reasoning_effort", "default") not in controls(cfg)["effort_levels"]:
+            cfg["reasoning_effort"] = "default"
         cfg["_request_options"] = request_options(cfg)
         validate_endpoint(cfg.get("base_url", ""))
         if not cfg.get("api_key") or cfg.get("model") != r.model:
@@ -471,8 +476,8 @@ def _process(app, job_id, cfg):
                 "\nYou are a team member. Reply in the researcher's language. Outside a research round, "
                 "finish with a normal answer; do not call advise/end_sprint/distill. "
                 "Use team tools to read context and send messages. To hand work to members, "
-                "name them in team_send_message's `to`; @Name in text only refers to someone. "
-                "Name someone in `to` only when they still have work to do; a finished result needs no `to`, the thread shows it. "
+                "name them in team_send_message's `wake`; @Name in text only refers to someone. "
+                "Put someone in `wake` only when they still have work to do; reporting a result needs no `wake`, the thread shows it. "
                 "Answer what was asked at the length asked; keep verification notes to what the reader needs. "
                 "Reply in the originating thread; follow the user's stated order and workflow. "
                 "When you need the owner's decision, ask explicitly with team_wait_for_owner. "
@@ -504,6 +509,14 @@ def _process(app, job_id, cfg):
                 r.runtime = {**r.runtime, "team": team_context}
                 payload["tools"] = [*payload["tools"], *TEAM_TOOLS]
                 payload["context"] += "\nTeam context: " + json.dumps(team_context)
+                from .models import ResearchWorkspace
+                from .team_message_marks import context_pins
+
+                workspace = d.get(ResearchWorkspace, team_context["workspace_id"])
+                payload["context"] += "\nChannel pins:\n" + json.dumps(
+                    context_pins(d, workspace, team_context["channel_id"]),
+                    ensure_ascii=False,
+                )
                 d.commit()
     payload["context"] += selection_context(app, owner, session_id, job_id, snapshot)
     if research:
@@ -787,9 +800,15 @@ def _process(app, job_id, cfg):
                     "images": images,
                 }
             except Exception as e:  # noqa: BLE001 - isolate tool/provider failures without exposing secrets
+                import httpx
+
                 message = (
                     str(e)[:500]
                     if isinstance(e, ValueError)
+                    # Network failures say so: the fix is the connection or proxy, not a retry.
+                    else "网络连接失败或超时，可能需要检查网络或代理 / "
+                    "Network unreachable or timed out: check the connection or proxy"
+                    if isinstance(e, (httpx.TransportError, TimeoutError, ConnectionError))
                     else "工具执行失败或超时，请重试"
                 )
                 if not isinstance(e, ValueError):
@@ -1136,7 +1155,7 @@ def _process(app, job_id, cfg):
             current.runtime = {
                 k: v
                 for k, v in (current.runtime or {}).items()
-                if k != "artifact_preview"
+                if k not in {"artifact_preview", "team_status"}
             }
         d.commit()
 
@@ -1165,6 +1184,12 @@ def ready_job(d, settings):
     provider lease. Slots can change between selection and the first model call.
     """
     represented = set()
+    # How many colleagues work at once: an operator's override, else the researcher's setting.
+    from .research_settings import agents_at_once
+
+    research_limit = getattr(
+        settings, "agent_research_workers", 0
+    ) or agents_at_once(settings)
     translating = d.scalar(
         select(func.count())
         .select_from(AgentRun)
@@ -1189,17 +1214,35 @@ def ready_job(d, settings):
         .limit(32)
         .with_for_update(skip_locked=True)
     ):
+        from .models import AgentSession, TeamMember
+        from .research_team import research_context
+
+        info = (job.runtime or {}).get("team")
+        if not info and (job.runtime or {}).get("research", {}).get("project_id"):
+            info = research_context(d, job.runtime["research"], job.owner)
+        member = d.get(TeamMember, info["member_id"]) if info else None
+        if member is None:
+            member = d.scalar(
+                select(TeamMember).where(TeamMember.session_id == job.session_id)
+            )
+        if member is None:
+            session = d.get(AgentSession, job.session_id)
+            if session and session.kind in {"project_lead", "project_chat"}:
+                member = d.scalar(
+                    select(TeamMember).where(
+                        TeamMember.workspace_id == session.workspace_id,
+                        TeamMember.role == "advisor",
+                    )
+                )
+        if member and member.paused:
+            continue
         if (
             job.lane == "translation"
             and settings.agent_translation_workers
             and translating >= settings.agent_translation_workers
         ):
             continue
-        if (
-            job.lane == "research"
-            and settings.agent_research_workers
-            and researching >= settings.agent_research_workers
-        ):
+        if job.lane == "research" and researching >= research_limit:
             continue
         try:
             config = read_config(settings, job.owner, job.model_config_id)
@@ -1230,7 +1273,14 @@ def main():
             for interrupted in d.scalars(
                 select(AgentRun).where(AgentRun.status.in_(["running", "cancelled"]))
             ):
-                interrupted.runtime = {**(interrupted.runtime or {}), "settled": True}
+                interrupted.runtime = {
+                    **{
+                        k: v
+                        for k, v in (interrupted.runtime or {}).items()
+                        if k != "team_status"
+                    },
+                    "settled": True,
+                }
                 if interrupted.status == "running":
                     interrupted.runtime = {**interrupted.runtime, "interrupted": True}
                     interrupted.status = "failed"
@@ -1271,7 +1321,11 @@ def main():
                         )
                         if stopped:
                             stopped.runtime = {
-                                **(stopped.runtime or {}),
+                                **{
+                                    k: v
+                                    for k, v in (stopped.runtime or {}).items()
+                                    if k != "team_status"
+                                },
                                 "settled": True,
                             }
                         d.execute(

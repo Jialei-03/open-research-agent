@@ -108,6 +108,9 @@ def research_out(d, project):
 
 def navigation(settings, d, owner):
     from .research_locations import location_for
+    from .team_roster import personal
+
+    personal(d, owner)
 
     workspaces = list(
         d.scalars(
@@ -188,7 +191,9 @@ def install_hub_routes(app, settings, db, auth, human, owned, project_of, projec
     @app.get(BASE + "/navigation")
     def get_navigation(a=Depends(auth), d=Depends(db)):
         allowed(a)
-        return navigation(settings, d, a["id"])
+        result = navigation(settings, d, a["id"])
+        d.commit()
+        return result
 
     @app.post(BASE + "/projects/{id}/read")
     def mark_read(id: str, body: ReadInput, a=Depends(auth), d=Depends(db)):

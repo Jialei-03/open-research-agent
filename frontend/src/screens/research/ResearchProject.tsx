@@ -1,6 +1,6 @@
 import {
+  Sparkle,
   ArrowLeft,
-  Folder,
   Plus,
   Pencil,
   GitFork,
@@ -11,6 +11,7 @@ import {
   Pause,
   Play,
   Square,
+  Bell,
 } from "lucide-react";
 import {
   useCallback,
@@ -29,6 +30,9 @@ import {
   Dialog,
   IconButton,
   Menu,
+  Resizer,
+  SegmentedControl,
+  useResizableWidth,
   TextArea,
   TextField,
   toast,
@@ -63,11 +67,21 @@ import { JumpToLatest } from "../../reader/JumpToLatest";
 import { OPEN_FILES_EVENT } from "./files/files-api";
 import type { SlashCommand } from "../../lib/slash";
 import { readModels, type ModelRow } from "../setup/model-api";
+import { useModelRevision } from "../setup/useModelRevision";
 import { copyCommand, modelCommands } from "../../lib/composer-commands";
 import { Composer } from "./talk/Composer";
 import { ModelPicker } from "./talk/Pickers";
-import { RecordPanel } from "./talk/RecordPanel";
+import { RecordPanel, type RecordTab } from "./talk/RecordPanel";
+import { ChangeNumbers } from "./ChangeCards";
+import { useChanges } from "./use-changes";
+import type { ReviewTarget } from "./ReviewChanges";
+import { PANEL_DEFAULT, PANEL_MIN, panelMax } from "../../reader/PanelResizer";
 import { buildThread, working } from "./talk/thread";
+import { CallMe } from "./CallMe";
+import { ExplainSelection } from "./ExplainSelection";
+import { ResearchAway } from "./ResearchAway";
+import { ResearchBoard } from "./ResearchBoard";
+import { ResearchReplay } from "./ResearchReplay";
 import { ThreadView, type ThreadActions } from "./talk/ThreadView";
 import { ForkDialog, ResearchOrigin } from "./ResearchChanges";
 import { AppActions } from "../../app/AppSidebar";
@@ -80,6 +94,20 @@ import styles from "./talk/Talk.module.css";
 const ACTIVE_POLL = 2500;
 const IDLE_POLL = 12000;
 
+function readRecord(key: string): { open: boolean; tab: RecordTab } {
+  try {
+    const saved = JSON.parse(localStorage.getItem(key) || "null");
+    return {
+      open: saved?.open === true,
+      tab: ["progress", "files", "changes", "experiments"].includes(saved?.tab)
+        ? saved.tab
+        : "progress",
+    };
+  } catch {
+    return { open: false, tab: "progress" };
+  }
+}
+
 /**
  * One research project as a conversation with the advisor: the plan is talked
  * through, then the work and the decisions it needs come down the same thread.
@@ -90,22 +118,29 @@ export function ResearchProject({
   go,
   backHash,
   embedded = false,
+  locateId,
 }: {
   id: string;
   go(hash: string): void;
   backHash?: string;
   embedded?: boolean;
+  locateId?: string;
 }) {
   const { t, locale } = useI18n();
   const { owner } = useContext(AppActions);
   const draftKey = `ora-research-draft:${owner || "local"}:${id}`;
   const [models, setModels] = useState<ModelRow[]>([]);
+  const [modelsKnown, setModelsKnown] = useState(false);
+  const modelRevision = useModelRevision();
   useEffect(() => {
     readModels().then(
-      (s) => setModels(s.models),
+      (s) => {
+        setModels(s.models);
+        setModelsKnown(true);
+      },
       () => setModels([]),
     );
-  }, []);
+  }, [modelRevision]);
   const [detail, setDetail] = useState<ProjectDetail | null>(null);
   const [events, setEvents] = useState<ResearchEvent[]>([]);
   const [computes, setComputes] = useState<Compute[]>([]);
@@ -132,7 +167,32 @@ export function ResearchProject({
   };
   const [busy, setBusy] = useState(false);
   const [pending, setPending] = useState("");
-  const [record, setRecord] = useState(false);
+  const recordKey = `ora-research-record:${owner || "local"}:${id}`;
+  const [recordState, setRecordState] = useState(() => readRecord(recordKey));
+  const record = recordState.open;
+  const recordTab = recordState.tab;
+  const updateRecord = (open: boolean, tab = recordTab) => {
+    const value = { open, tab };
+    setRecordState(value);
+    try {
+      localStorage.setItem(recordKey, JSON.stringify(value));
+    } catch {
+      /* Storage can be disabled. */
+    }
+  };
+  useEffect(() => setRecordState(readRecord(recordKey)), [recordKey]);
+  const sizing = useResizableWidth({
+    key: `ora-research-record-width:${owner || "local"}:${id}`,
+    fallback: PANEL_DEFAULT,
+    min: PANEL_MIN,
+    maxFor: panelMax,
+  });
+  const [review, setReview] = useState<ReviewTarget>({
+    sprintId: "",
+    request: 0,
+  });
+  const refreshKey = `${detail?.project.updated_at}:${detail?.project.status}:${reads}`;
+  const changes = useChanges(detail?.project.id || "", refreshKey);
   const [outputFile, setOutputFile] = useState("");
   const [filesOpen, setFilesOpen] = useState(false);
   const [forking, setForking] = useState<string | null>(null);
@@ -155,13 +215,33 @@ export function ResearchProject({
   );
   const scroller = useRef<HTMLDivElement>(null);
   const pinned = useRef(true);
+  const located = useRef("");
+  // A research reads two ways: where it stands (the board) and how it got
+  // there (the discussion). Scoping is a conversation; after it, the board leads.
+  const [view, setView] = useState<"board" | "talk" | "replay" | "">("");
+  const [discussing, setDiscussing] = useState("");
+  const [calling, setCalling] = useState(false);
+  const discuss = (itemId: string) => {
+    located.current = "";
+    setDiscussing(itemId);
+    setView("talk");
+  };
 
   useEffect(() => {
-    setRecord(false);
+    setReview({ sprintId: "", request: 0 });
     setOutputFile("");
     setFilesOpen(false);
     setRun("");
+    setView("");
+    setDiscussing("");
   }, [id]);
+
+  // The view is chosen once, when the research opens; a stage change later
+  // does not pull the researcher out of where they are reading.
+  const opened = detail?.project.id === id ? detail.project.stage : "";
+  useEffect(() => {
+    if (opened && !view) setView(boardFirst(opened) ? "board" : "talk");
+  }, [opened, view]);
 
   // The /files command, or anything else, asks for the files panel.
   useEffect(() => {
@@ -234,10 +314,38 @@ export function ResearchProject({
   );
 
   // Follow the conversation down, unless the reader scrolled up to look back.
+  // The board and the replay are read from the top.
+  const onBoard =
+    (view ||
+      (detail && boardFirst(detail.project.stage) ? "board" : "talk")) !==
+    "talk";
   useLayoutEffect(() => {
     const el = scroller.current;
-    if (el && pinned.current) el.scrollTop = el.scrollHeight;
-  }, [items.length, pending, detail?.sprints, runs]);
+    if (el && pinned.current && !onBoard) el.scrollTop = el.scrollHeight;
+  }, [items.length, pending, detail?.sprints, runs, onBoard]);
+  // The board reads from the top.
+  useLayoutEffect(() => {
+    const el = scroller.current;
+    if (el && onBoard) el.scrollTop = 0;
+  }, [onBoard, id]);
+
+  const target = discussing || locateId;
+  const locatedItem = items.some((item) => item.id === target)
+    ? target
+    : events.find((event) => event.id === target)?.sprint_id;
+  useLayoutEffect(() => {
+    if (!locatedItem || located.current === locatedItem) return;
+    const row = [
+      ...(scroller.current?.querySelectorAll<HTMLElement>(
+        "[data-research-item]",
+      ) || []),
+    ].find((element) => element.dataset.researchItem === locatedItem);
+    if (!row) return;
+    pinned.current = false;
+    row.scrollIntoView({ block: "center" });
+    row.focus({ preventScroll: true });
+    located.current = locatedItem;
+  }, [locatedItem, items]);
 
   const fail = (error: unknown) =>
     toast.show({
@@ -250,10 +358,14 @@ export function ResearchProject({
   const say = async () => {
     const words = text.trim();
     if (!words) return;
+    // What you say is part of the discussion; show it there.
+    setView("talk");
     setPending(words);
     changeText("");
     pinned.current = true;
     try {
+      if (modelId && modelId !== detail?.project.model_config_id)
+        await moveModel(id, modelId);
       await sendMessage(id, words);
       refreshResearchNavigation();
       refresh();
@@ -265,11 +377,17 @@ export function ResearchProject({
     }
   };
 
+  const openReview = (sprintId = "", path?: string) => {
+    setReview((old) => ({ sprintId, path, request: old.request + 1 }));
+    setOutputFile("");
+    updateRecord(true, "changes");
+  };
   const actions: ThreadActions = {
+    review: openReview,
     busy,
     openOutput: (path) => {
       setOutputFile(path);
-      setRecord(true);
+      updateRecord(true);
     },
     fork: (sprintId) => {
       setRerunning(false);
@@ -315,7 +433,7 @@ export function ResearchProject({
     },
     openRun: (jobId) => {
       setRun(jobId);
-      setRecord(true);
+      updateRecord(true, "experiments");
     },
   };
 
@@ -385,6 +503,7 @@ export function ResearchProject({
     : [];
   const pinnedIds = new Set(pinnedItems.map((item) => item.id));
   const p = detail.project;
+  const shown = view || (boardFirst(p.stage) ? "board" : "talk");
   const busyNow = working(detail.sprints);
   const candidateRun = busyNow ? runsBySprint.get(busyNow.id) : undefined;
   const liveRun =
@@ -394,6 +513,10 @@ export function ResearchProject({
   const fetchNote =
     detail.datasets.find((d) => d.status === "pending" && d.note)?.note ?? "";
   const finished = p.status === "finished" && p.stage === "done";
+  const modelId =
+    models.find((model) => model.id === p.model_config_id)?.id ||
+    models[0]?.id ||
+    "";
   // What "/" offers on a research: how it runs, its report, its model.
   const commands: SlashCommand[] = [
     ...(p.status === "paused"
@@ -452,9 +575,7 @@ export function ResearchProject({
       return typeof said?.detail.text === "string" ? said.detail.text : "";
     }),
     // A finished research has no next round to change the model of.
-    ...(finished
-      ? []
-      : modelCommands(t, models, p.model_config_id, chooseModel)),
+    ...(finished ? [] : modelCommands(t, models, modelId, chooseModel)),
   ];
   const pendingPlan = items.find(
     (item) =>
@@ -491,224 +612,305 @@ export function ResearchProject({
     card.focus({ preventScroll: true });
   };
   return (
-    <div className={styles.page}>
-      <header className={styles.head}>
-        <Folder size={17} aria-hidden />
-        <h1 className={styles.headTitle}>
-          <span title={p.question}>{p.title || p.question}</span>
-        </h1>
-        <div className={styles.headTools}>
-          <Menu
-            label={t("research.actions")}
-            items={[
-              {
-                id: "rename",
-                label: t("projects.sessions.rename"),
-                icon: Pencil,
-                onSelect: () => {
-                  setTitle(p.title || p.question);
-                  setNaming(true);
-                },
-              },
-              {
-                id: "fork",
-                label: t("research.fork.action"),
-                icon: GitFork,
-                onSelect: () => {
-                  setRerunning(false);
-                  setForking("");
-                },
-              },
-              {
-                id: "rerun",
-                label: t("compare.rerun"),
-                icon: GitFork,
-                onSelect: () => {
-                  setRerunning(true);
-                  setForking("");
-                },
-              },
-              {
-                id: "compare",
-                label: t("compare.title"),
-                icon: GitFork,
-                disabled: !p.workspace_id,
-                onSelect: () => go(`workspaces/${p.workspace_id}/compare`),
-              },
-              p.status === "paused"
-                ? {
-                    id: "resume",
-                    label: t("research.resume"),
-                    icon: Play,
-                    onSelect: () => move(resumeProject),
-                  }
-                : {
-                    id: "pause",
-                    label: t("research.pause"),
-                    icon: Pause,
-                    onSelect: () => move(pauseProject),
-                    disabled: p.status !== "active",
-                  },
-              {
-                id: "stop",
-                label: t("research.stop"),
-                icon: Square,
-                onSelect: () =>
-                  liveRun &&
-                  ["scoping", "discussion"].includes(busyNow?.role || "")
-                    ? void controlChat(p.session_id, liveRun.id, "abort").then(
-                        refresh,
-                        fail,
-                      )
-                    : move(stopProject),
-                disabled: p.status === "finished" && !liveRun,
-              },
-              {
-                id: "archive",
-                label: t("projects.sessions.archive"),
-                icon: Archive,
-                disabled: p.status !== "finished" || !!busyNow,
-                onSelect: async () => {
-                  try {
-                    await updateChatSession(p.session_id, { archived: true });
-                    refreshResearchNavigation();
-                    go(`workspaces/${p.workspace_id}`);
-                  } catch (error) {
-                    fail(error);
-                  }
-                },
-              },
-            ]}
-            trigger={(props) => (
-              <IconButton
-                icon={MoreHorizontal}
-                label={t("research.actions")}
+    <div className={styles.layout}>
+      <div className={styles.page} data-testid="research-conversation">
+        <header className={styles.head}>
+          <Sparkle size={17} aria-hidden />
+          <div className={styles.headHeading}>
+            <h1 className={styles.headTitle}>
+              <span title={p.question}>{p.title || p.question}</span>
+            </h1>
+            {!!changes.changes?.files.length && (
+              <Button
+                variant="ghost"
                 size="sm"
-                {...props}
-              />
+                className={styles.headStats}
+                aria-label={t("research.review.action")}
+                onClick={() => openReview()}
+              >
+                <ChangeNumbers changes={changes.changes} />
+              </Button>
             )}
-          />
-          <IconButton
-            icon={record ? PanelRightClose : PanelRightOpen}
-            label={t(record ? "research.record.hide" : "research.record.show")}
+          </div>
+          <SegmentedControl
+            kind="radio"
             size="sm"
-            onClick={() => {
-              setRecord(!record);
-            }}
+            label={t("research.view.board")}
+            value={shown}
+            onChange={(next) => setView(next as "board" | "talk" | "replay")}
+            options={[
+              { value: "board", label: t("research.view.board") },
+              { value: "talk", label: t("research.view.talk") },
+              { value: "replay", label: t("research.view.replay") },
+            ]}
           />
-        </div>
-      </header>
-      <div className={styles.body}>
-        <div className={styles.talk}>
-          <div className={styles.scrollArea}>
-            <div
-              className={styles.scroll}
-              ref={scroller}
-              onScroll={(event) => {
-                const el = event.currentTarget;
-                pinned.current =
-                  el.scrollHeight - el.scrollTop - el.clientHeight < 80;
-              }}
-            >
-              <div className={styles.thread}>
-                <ResearchOrigin
-                  detail={detail}
-                  go={go}
-                  onResume={() => move(resumeProject)}
+          <div className={styles.headTools}>
+            <Menu
+              label={t("research.actions")}
+              items={[
+                {
+                  id: "rename",
+                  label: t("projects.sessions.rename"),
+                  icon: Pencil,
+                  onSelect: () => {
+                    setTitle(p.title || p.question);
+                    setNaming(true);
+                  },
+                },
+                {
+                  id: "fork",
+                  label: t("research.fork.action"),
+                  icon: GitFork,
+                  onSelect: () => {
+                    setRerunning(false);
+                    setForking("");
+                  },
+                },
+                {
+                  id: "rerun",
+                  label: t("compare.rerun"),
+                  icon: GitFork,
+                  onSelect: () => {
+                    setRerunning(true);
+                    setForking("");
+                  },
+                },
+                {
+                  id: "compare",
+                  label: t("compare.title"),
+                  icon: GitFork,
+                  disabled: !p.workspace_id,
+                  onSelect: () => go(`workspaces/${p.workspace_id}/compare`),
+                },
+                {
+                  id: "call-me",
+                  label: t("research.callMe.title"),
+                  icon: Bell,
+                  onSelect: () => setCalling(true),
+                },
+                p.status === "paused"
+                  ? {
+                      id: "resume",
+                      label: t("research.resume"),
+                      icon: Play,
+                      onSelect: () => move(resumeProject),
+                    }
+                  : {
+                      id: "pause",
+                      label: t("research.pause"),
+                      icon: Pause,
+                      onSelect: () => move(pauseProject),
+                      disabled: p.status !== "active",
+                    },
+                {
+                  id: "stop",
+                  label: t("research.stop"),
+                  icon: Square,
+                  onSelect: () =>
+                    liveRun &&
+                    ["scoping", "discussion"].includes(busyNow?.role || "")
+                      ? void controlChat(
+                          p.session_id,
+                          liveRun.id,
+                          "abort",
+                        ).then(refresh, fail)
+                      : move(stopProject),
+                  disabled: p.status === "finished" && !liveRun,
+                },
+                {
+                  id: "archive",
+                  label: t("projects.sessions.archive"),
+                  icon: Archive,
+                  disabled: p.status !== "finished" || !!busyNow,
+                  onSelect: async () => {
+                    try {
+                      await updateChatSession(p.session_id, { archived: true });
+                      refreshResearchNavigation();
+                      go(`workspaces/${p.workspace_id}`);
+                    } catch (error) {
+                      fail(error);
+                    }
+                  },
+                },
+              ]}
+              trigger={(props) => (
+                <IconButton
+                  icon={MoreHorizontal}
+                  label={t("research.actions")}
+                  size="sm"
+                  {...props}
                 />
-                {!!pinnedItems.length && (
+              )}
+            />
+            <IconButton
+              icon={record ? PanelRightClose : PanelRightOpen}
+              label={t(
+                record ? "research.record.hide" : "research.record.show",
+              )}
+              size="sm"
+              onClick={() => {
+                updateRecord(!record);
+              }}
+            />
+          </div>
+        </header>
+        <div className={styles.body}>
+          <div className={styles.talk}>
+            <div className={styles.scrollArea}>
+              <div
+                className={styles.scroll}
+                ref={scroller}
+                onScroll={(event) => {
+                  const el = event.currentTarget;
+                  pinned.current =
+                    el.scrollHeight - el.scrollTop - el.clientHeight < 80;
+                }}
+              >
+                <ResearchAway
+                  key={p.id}
+                  detail={detail}
+                  events={events}
+                  items={items}
+                  onDiscuss={discuss}
+                />
+                {shown === "board" && (
+                  <ResearchBoard
+                    detail={detail}
+                    events={events}
+                    items={items}
+                    onDiscuss={discuss}
+                    onLog={actions.openLog}
+                    onChange={refresh}
+                    onDecide={actions.decide}
+                  />
+                )}
+                {shown === "replay" && (
+                  <ResearchReplay
+                    detail={detail}
+                    events={events}
+                    items={items}
+                    onDiscuss={discuss}
+                  />
+                )}
+                <div className={styles.thread} hidden={shown !== "talk"}>
+                  <ResearchOrigin
+                    detail={detail}
+                    go={go}
+                    onResume={() => move(resumeProject)}
+                  />
+                  {!!pinnedItems.length && (
+                    <ThreadView
+                      items={pinnedItems}
+                      project={p}
+                      computes={computes}
+                      actions={actions}
+                      runs={runsBySprint}
+                      locateId={locatedItem || undefined}
+                    />
+                  )}
                   <ThreadView
-                    items={pinnedItems}
+                    items={items.filter((item) => !pinnedIds.has(item.id))}
                     project={p}
                     computes={computes}
                     actions={actions}
                     runs={runsBySprint}
+                    locateId={locatedItem || undefined}
+                  />
+                  {pending && <div className={styles.mine}>{pending}</div>}
+                  {waitingData && p.stage === "experiments" && (
+                    <p className={styles.systemLine}>
+                      {t("research.thread.fetching")}
+                      {fetchNote && ` ${fetchNote}`}
+                    </p>
+                  )}
+                  {p.status === "paused" && (
+                    <p className={styles.systemLine}>
+                      {t("research.thread.paused")}
+                    </p>
+                  )}
+                </div>
+              </div>
+              {!onBoard && (
+                <JumpToLatest scroller={scroller} streaming={!!busyNow} />
+              )}
+            </div>
+            {!embedded && (
+              <div className={styles.dock}>
+                {attention && (
+                  <CardJump
+                    key={`${id}-${attention.kind}-${attention.id}`}
+                    cardId={`research-${attention.kind}-${attention.id}`}
+                    scroller={scroller}
+                    onClick={viewAttention}
+                    label={t(
+                      attention.kind === "plan"
+                        ? "research.attention.viewPlan"
+                        : "research.attention.viewDecision",
+                    )}
                   />
                 )}
-                <ThreadView
-                  items={items.filter((item) => !pinnedIds.has(item.id))}
-                  project={p}
-                  computes={computes}
-                  actions={actions}
-                  runs={runsBySprint}
+                {liveRun && busyNow && (
+                  <LiveCard
+                    run={liveRun}
+                    role={busyNow.role}
+                    name={t(
+                      `research.role.${["scoping", "discussion"].includes(busyNow.role) ? "discussion" : busyNow.role}` as MessageKey,
+                    )}
+                  />
+                )}
+                <Composer
+                  value={text}
+                  onChange={changeText}
+                  onSend={say}
+                  busy={!!pending}
+                  needsModel={modelsKnown && models.length === 0}
+                  label={t("research.composer.label")}
+                  placeholder={t("research.composer.continue")}
+                  leading={
+                    <>
+                      <IconButton
+                        icon={Plus}
+                        label={t("research.attach")}
+                        size="sm"
+                        onClick={() => setFilesOpen(true)}
+                      />
+                    </>
+                  }
+                  sendLabel={t("research.home.send")}
+                  commands={commands}
+                  acceptInserts
+                  tools={
+                    models.length > 0 &&
+                    !finished && (
+                      <ModelPicker
+                        models={models}
+                        value={modelId}
+                        onChange={(modelId) => void chooseModel(modelId)}
+                        label={t("commands.model")}
+                      />
+                    )
+                  }
                 />
-                {pending && <div className={styles.mine}>{pending}</div>}
-                {waitingData && p.stage === "experiments" && (
-                  <p className={styles.systemLine}>
-                    {t("research.thread.fetching")}
-                    {fetchNote && ` ${fetchNote}`}
-                  </p>
-                )}
-                {p.status === "paused" && (
-                  <p className={styles.systemLine}>
-                    {t("research.thread.paused")}
-                  </p>
-                )}
               </div>
-            </div>
-            <JumpToLatest scroller={scroller} streaming={!!busyNow} />
+            )}
           </div>
-          {!embedded && (
-            <div className={styles.dock}>
-              {attention && (
-                <CardJump
-                  key={`${id}-${attention.kind}-${attention.id}`}
-                  cardId={`research-${attention.kind}-${attention.id}`}
-                  scroller={scroller}
-                  onClick={viewAttention}
-                  label={t(
-                    attention.kind === "plan"
-                      ? "research.attention.viewPlan"
-                      : "research.attention.viewDecision",
-                  )}
-                />
-              )}
-              {liveRun && busyNow && (
-                <LiveCard
-                  run={liveRun}
-                  role={busyNow.role}
-                  name={t(
-                    `research.role.${["scoping", "discussion"].includes(busyNow.role) ? "discussion" : busyNow.role}` as MessageKey,
-                  )}
-                />
-              )}
-              <Composer
-                value={text}
-                onChange={changeText}
-                onSend={say}
-                busy={!!pending}
-                label={t("research.composer.label")}
-                placeholder={t("research.composer.continue")}
-                leading={
-                  <>
-                    <IconButton
-                      icon={Plus}
-                      label={t("research.attach")}
-                      size="sm"
-                      onClick={() => setFilesOpen(true)}
-                    />
-                  </>
-                }
-                sendLabel={t("research.home.send")}
-                commands={commands}
-                acceptInserts
-                tools={
-                  models.length > 0 &&
-                  !finished && (
-                    <ModelPicker
-                      models={models}
-                      value={p.model_config_id}
-                      onChange={(modelId) => void chooseModel(modelId)}
-                      label={t("commands.model")}
-                    />
-                  )
-                }
-              />
-            </div>
-          )}
         </div>
-        {record && (
+      </div>
+      {record && (
+        <>
+          <Resizer
+            sizes="next"
+            width={sizing.width}
+            min={PANEL_MIN}
+            max={sizing.max}
+            fallback={PANEL_DEFAULT}
+            maxNow={() => panelMax(window.innerWidth)}
+            property="--panel-width"
+            label={t("research.record.resize")}
+            onChange={sizing.choose}
+          />
           <RecordPanel
+            key={id}
             outputFile={outputFile}
             onOutputFile={setOutputFile}
             detail={detail}
@@ -717,9 +919,16 @@ export function ResearchProject({
             onRun={setRun}
             actions={actions}
             go={go}
+            tab={recordTab}
+            onTab={(tab) => updateRecord(true, tab)}
+            onClose={() => updateRecord(false)}
+            width={sizing.width}
+            changes={changes}
+            review={review}
+            refreshKey={refreshKey}
           />
-        )}
-      </div>
+        </>
+      )}
       {forking !== null && (
         <ForkDialog
           project={p}
@@ -827,6 +1036,15 @@ export function ResearchProject({
           </div>
         )}
       </Dialog>
+      <ExplainSelection root={scroller} projectId={p.id} />
+      <CallMe
+        open={calling}
+        projectId={p.id}
+        chosen={p.call_me ?? []}
+        onClose={() => setCalling(false)}
+        onSaved={refresh}
+        onError={fail}
+      />
       <Dialog
         open={!!log}
         onClose={() => setLog(null)}
@@ -875,4 +1093,9 @@ function CardJump({
       </Button>
     </div>
   ) : null;
+}
+
+/** Experiments and what follows them lead with the board; scoping and workflows are a conversation. */
+function boardFirst(stage: string) {
+  return ["experiments", "conclusion", "retrospective", "done"].includes(stage);
 }

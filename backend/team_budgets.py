@@ -135,10 +135,27 @@ def notice(d, workspace, message, reason, *, source_key):
         TeamMessage(
             workspace_id=workspace.id,
             channel_id=message.channel_id,
-            thread_id=message.thread_id or message.id,
+            thread_id=message.thread_id,
             kind="budget",
             data={"reason": reason},
             mentions=[human] if human else [],
             source_key=source_key,
         )
     )
+
+
+def spent(d, workspace):
+    """What the project has used, as shown to the researcher: finished calls only,
+    all time. It never goes down (reservations and the budget window do)."""
+    query = (
+        select(func.coalesce(func.sum(ModelUsage.total_tokens), 0))
+        .join(AgentRun, AgentRun.id == ModelUsage.task_id)
+        .join(AgentSession, AgentSession.id == AgentRun.session_id)
+        .where(
+            ModelUsage.source == "agent",
+            ModelUsage.total_tokens.is_not(None),
+            ModelUsage.owner == workspace.owner,
+            _in_workspace(workspace),
+        )
+    )
+    return int(d.scalar(query))

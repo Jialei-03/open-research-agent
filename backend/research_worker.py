@@ -15,6 +15,7 @@ from types import SimpleNamespace
 from sqlalchemy import select
 
 from . import (
+    research_callme,
     research_datasets,
     research_dialogue,
     research_map,
@@ -413,7 +414,7 @@ def _plan(app, d, project):
         return
     if (
         spec
-        and spec["max_rounds"]
+        and spec.get("max_rounds")
         and project.workflow_state["steps"][project.workflow_state["current"]]["rounds"]
         >= spec["max_rounds"]
     ):
@@ -476,6 +477,9 @@ def _plan(app, d, project):
         else:
             # The one in charge decides whether the question is worth more.
             research_stages.request_budget(d, project)
+        return
+    if research_callme.spend_due(project):
+        research_callme.request_spend(d, project)
         return
     config = read_config(app.state.settings, project.owner, project.model_config_id)
     if not config.get("model"):

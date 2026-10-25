@@ -51,6 +51,9 @@ import {
 import { ResearchNavigationProvider } from "../screens/research/ResearchNavigation";
 import { LocalOnly } from "../screens/research/LocalOnly";
 import { TeamScreen } from "../screens/research/TeamScreen";
+import { Inbox } from "../screens/research/Inbox";
+import { AllProjects } from "../screens/research/AllProjects";
+import { ColleaguesScreen } from "../screens/team/ColleaguesScreen";
 import { ResearchProject } from "../screens/research/ResearchProject";
 import { ScheduleCenter } from "../screens/schedules/ScheduleCenter";
 import { CustomizeScreen } from "../screens/customize/CustomizeScreen";
@@ -99,8 +102,10 @@ function App({ user, setUser }: { user: User; setUser: (user: null) => void }) {
   });
   // The address is read only when it still says what is drawn: a click on the
   // settings link changes it a moment before this renders with the new route.
+  // An old address that now means the settings (customize/models) says so too:
+  // it must never become what the settings window returns to.
   const here = location.hash.slice(1);
-  if (route.screen !== "settings" && !here.startsWith("settings"))
+  if (route.screen !== "settings" && parseAppRoute(here).screen !== "settings")
     under.current = { route, hash: here || "new" };
   const [papers, setPapers] = useState<Paper[]>([]);
   const [tick, setTick] = useState(0);
@@ -330,11 +335,18 @@ function App({ user, setUser }: { user: User; setUser: (user: null) => void }) {
             "research-collections",
             "schedules",
             "customize",
+            "colleagues",
           ].includes(shown.screen) &&
-            local === false &&
-            !(shown.screen === "customize" && shown.section === "models") && (
-              <LocalOnly />
-            )}
+            local === false && <LocalOnly />}
+          {shown.screen === "all-projects" && local !== false && (
+            <AllProjects go={go} />
+          )}
+          {shown.screen === "colleagues" && local !== false && (
+            <ColleaguesScreen colleague={shown.colleague} go={go} />
+          )}
+          {shown.screen === "inbox" && local !== false && (
+            <Inbox workspaceId={shown.workspaceId} go={go} />
+          )}
           {shown.screen === "team" && local !== false && (
             <TeamScreen
               key={shown.workspaceId}
@@ -368,10 +380,9 @@ function App({ user, setUser }: { user: User; setUser: (user: null) => void }) {
               go={go}
             />
           )}
-          {shown.screen === "customize" &&
-            (local !== false || shown.section === "models") && (
-              <CustomizeScreen section={shown.section} />
-            )}
+          {shown.screen === "customize" && local !== false && (
+            <CustomizeScreen section={shown.section} />
+          )}
           {local !== false && shown.screen === "workspaces" && (
             <WorkspaceScreen
               key={shown.workspaceId || "all"}

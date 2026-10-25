@@ -15,10 +15,12 @@ import {
 import { useEffect, useState, type ReactNode } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { builtinWorkflow } from "../../workflows/workflows-api";
 import { useI18n } from "../../../i18n/I18nProvider";
 import type { MessageKey } from "../../../i18n/i18n";
-import { Button, IconButton, Spinner, toast } from "../../../ui";
+import { Button, Dialog, IconButton, Spinner, toast } from "../../../ui";
 import { describeStep } from "../describe";
+import type { Step } from "../conversation";
 import type {
   Compute,
   ResearchJob,
@@ -32,6 +34,10 @@ import { RunTurn } from "../process/Process";
 import type { ThreadItem } from "./thread";
 import { WorkflowBoundary } from "../../workflows/WorkflowProgress";
 import { CheckpointCard } from "../ChangeCards";
+import { MemberAvatar } from "../../team/MemberEditor";
+import { memberName } from "../../team/member-model";
+import { useWorkspaceTeams } from "../workspace-teams";
+import type { TeamMember } from "../team-api";
 import styles from "./Talk.module.css";
 
 const ROLE_AGENT: Record<string, Agent> = {
@@ -88,6 +94,7 @@ export interface ThreadActions {
   busy: boolean;
   fork?(sprintId?: string): void;
   changed?(): void;
+  review?(sprintId?: string, path?: string): void;
 }
 
 export function ThreadView({
@@ -96,6 +103,7 @@ export function ThreadView({
   computes,
   actions,
   runs,
+  locateId,
 }: {
   items: ThreadItem[];
   project: ResearchProject;
@@ -103,7 +111,25 @@ export function ThreadView({
   actions: ThreadActions;
   /** Each round's run, by sprint: what it said and did, step by step. */
   runs: Map<string, ResearchRun>;
+  locateId?: string;
 }) {
+  // The research as its group: each round is a colleague's message, with who
+  // handed it over and what they asked (the round before said it in next_focus).
+  const teams = useWorkspaceTeams(
+    project.workspace_id ? [project.workspace_id] : [],
+  );
+  const members = teams.get(project.workspace_id || "")?.members ?? [];
+  const handoffs = new Map<string, { from: string; text: string }>();
+  let previous: Extract<ThreadItem, { kind: "work" }> | undefined;
+  for (const item of items) {
+    if (item.kind !== "work" || item.sprint.number === 0) continue;
+    if (previous?.sprint.next_focus)
+      handoffs.set(item.id, {
+        from: previous.sprint.role,
+        text: previous.sprint.next_focus,
+      });
+    previous = item;
+  }
   return (
     <>
       {items.map((item, index) => {
@@ -130,6 +156,8 @@ export function ThreadView({
             return (
               <MessageItem
                 key={item.id}
+                id={item.id}
+                located={item.id === locateId}
                 who={item.who}
                 text={item.text}
                 at={item.at}
@@ -159,15 +187,29 @@ export function ThreadView({
           case "decision":
             return <DecisionCard key={item.id} item={item} actions={actions} />;
           case "work":
-            return (
+            const work = (
               <WorkBlock
                 key={item.id}
                 item={item}
+                members={members}
+                handoff={handoffs.get(item.id)}
                 project={project}
                 computes={computes}
                 actions={actions}
                 run={runs.get(item.sprint.id)}
               />
+            );
+            return item.id === locateId ? (
+              <div
+                key={item.id}
+                className={styles.located}
+                data-research-item={item.id}
+                tabIndex={-1}
+              >
+                {work}
+              </div>
+            ) : (
+              work
             );
           default:
             return null;
@@ -221,12 +263,16 @@ export function MessageActions({
 }
 
 function MessageItem({
+  id,
+  located,
   who,
   text,
   at,
   sprintId,
   actions,
 }: {
+  id: string;
+  located: boolean;
   who: string;
   text: string;
   at: string;
@@ -235,7 +281,12 @@ function MessageItem({
 }) {
   if (who === "system") return <p className={styles.systemLine}>{text}</p>;
   return (
-    <div className={styles.message} data-human={who === "human" || undefined}>
+    <div
+      className={`${styles.message} ${located ? styles.located : ""}`}
+      data-research-item={id}
+      data-human={who === "human" || undefined}
+      tabIndex={-1}
+    >
       <div className={who === "human" ? styles.mine : styles.theirs}>
         {who === "human" ? text : <Prose text={text} />}
       </div>
@@ -308,6 +359,7 @@ function PlanCard({
   const { t } = useI18n();
   const compute = computes.find((c) => c.id === plan.compute_id);
   const [whole, setWhole] = useState(false);
+  const [confirming, setConfirming] = useState(false);
   useEffect(() => {
     if (approved) setWhole(false);
   }, [approved]);
@@ -473,13 +525,52 @@ function PlanCard({
             loading={actions.busy}
             disabled={!!plan.inherited}
             onClick={() => {
-              if (!plan.inherited) actions.approvePlan(plan.version);
+              if (!plan.inherited) setConfirming(true);
             }}
           >
             {t("research.plan.start")}
           </Button>
         </footer>
       )}
+      {/* Experiments download, run and spend: say what will happen before it does. */}
+      <Dialog
+        open={confirming}
+        title={t("research.plan.confirm")}
+        onClose={() => setConfirming(false)}
+        footer={
+          <>
+            <Button variant="ghost" onClick={() => setConfirming(false)}>
+              {t("common.cancel")}
+            </Button>
+            <Button
+              variant="primary"
+              loading={actions.busy}
+              onClick={() => {
+                setConfirming(false);
+                actions.approvePlan(plan.version);
+              }}
+            >
+              {t("research.plan.start")}
+            </Button>
+          </>
+        }
+      >
+        <dl className={styles.confirmList}>
+          <dt>{t("research.plan.confirmMachine")}</dt>
+          <dd>{compute?.name ?? plan.compute_id}</dd>
+          <dt>{t("research.plan.confirmSteps")}</dt>
+          <dd>{plan.hypotheses.length}</dd>
+          <dt>{t("research.plan.confirmBudget")}</dt>
+          <dd>
+            {plan.budget?.max_sprints || plan.budget?.max_job_hours
+              ? t("research.plan.budget", {
+                  sprints: plan.budget.max_sprints ?? "∞",
+                  hours: plan.budget.max_job_hours ?? "∞",
+                })
+              : t("research.plan.noLimit")}
+          </dd>
+        </dl>
+      </Dialog>
     </article>
   );
 }
@@ -503,6 +594,10 @@ function DecisionCard({
     : [];
   const conclusion = d.kind === "conclusion";
   const budget = d.kind === "budget";
+  // A hypothesis was settled: the researcher is told; the work goes on meanwhile.
+  const checkin = d.kind === "checkin";
+  // Spending grew markedly since the researcher last said to go on.
+  const spend = d.kind === "spend";
   // The advisor asks something only the researcher knows; the work goes on meanwhile.
   const question = d.kind === "question";
   return (
@@ -524,18 +619,29 @@ function DecisionCard({
               ? t("research.ask.conclusion")
               : budget
                 ? t("research.ask.budget")
-                : question
-                  ? t("research.ask.question")
-                  : t("research.ask.title")}
+                : checkin
+                  ? t("research.ask.checkin")
+                  : spend
+                    ? t("research.ask.spend")
+                    : question
+                      ? t("research.ask.question")
+                      : t("research.ask.title")}
         </strong>
-        {conclusion ? (
+        {checkin ? (
+          <span
+            className={styles.tag}
+            data-tone={d.status === "supported" ? "good" : "warn"}
+          >
+            {t(`research.node.${d.status}` as MessageKey)}
+          </span>
+        ) : conclusion ? (
           <span
             className={styles.tag}
             data-tone={d.status === "refuted" ? "warn" : "good"}
           >
             {t(`research.end.${d.status || "concluded"}` as MessageKey)}
           </span>
-        ) : d.proposal && !budget && !question ? (
+        ) : d.proposal && !budget && !question && !spend ? (
           <span className={styles.tag}>
             {t(`research.talk.verdict.${d.proposal}` as MessageKey)}
           </span>
@@ -572,7 +678,7 @@ function DecisionCard({
               {choice.title}
             </Button>
           ))}
-        {item.open && (
+        {item.open && !checkin && (
           <textarea
             className={styles.note}
             rows={question ? 3 : 2}
@@ -595,6 +701,15 @@ function DecisionCard({
               {t("research.ask.answer")}
             </Button>
           </>
+        ) : item.open && checkin ? (
+          <Button
+            size="sm"
+            variant="primary"
+            loading={actions.busy}
+            onClick={() => actions.decide(item.id, true, "")}
+          >
+            {t("research.ask.seen")}
+          </Button>
         ) : item.open ? (
           <>
             <Button
@@ -608,7 +723,7 @@ function DecisionCard({
                   ? "workflows.redo"
                   : conclusion
                     ? "research.ask.more"
-                    : budget
+                    : budget || spend
                       ? "research.ask.budgetStop"
                       : "research.ask.no",
               )}
@@ -627,7 +742,9 @@ function DecisionCard({
                     ? "research.ask.accept"
                     : budget
                       ? "research.ask.budgetMore"
-                      : "research.ask.yes",
+                      : spend
+                        ? "research.ask.spendGo"
+                        : "research.ask.yes",
               )}
             </Button>
           </>
@@ -684,7 +801,9 @@ export function RunCard({
   job,
   computes,
   actions,
+  compact = false,
 }: {
+  compact?: boolean;
   job: ResearchJob;
   computes: Compute[];
   actions: ThreadActions;
@@ -711,7 +830,9 @@ export function RunCard({
           <X size={13} aria-hidden />
         )}
       </span>
-      <span className={styles.runName}>{tag || plainCommand(job.command)}</span>
+      <span className={styles.runName}>
+        {compact ? plainCommand(job.command) : tag || plainCommand(job.command)}
+      </span>
       {main ? (
         <span className={styles.runMain}>
           <span>{main[0]}</span>
@@ -730,13 +851,29 @@ export function RunCard({
   );
 }
 
+/** A research round's colleague: its role's member in the project's team. */
+export function roundMember(role: string, members: TeamMember[]) {
+  const wanted =
+    {
+      scoping: "advisor",
+      discussion: "advisor",
+      review: "advisor",
+      workflow: "executor",
+    }[role] || role;
+  return members.find((m) => m.role === wanted && !m.deleted);
+}
+
 function WorkBlock({
   item,
+  members,
+  handoff,
   project,
   computes,
   actions,
   run,
 }: {
+  members: TeamMember[];
+  handoff?: { from: string; text: string };
   item: Extract<ThreadItem, { kind: "work" }>;
   project: ResearchProject;
   computes: Compute[];
@@ -767,52 +904,166 @@ function WorkBlock({
         : "research.work.advisor",
     { n: item.sprint.number },
   );
+  const member = roundMember(role, members);
+  const said = item.reply || run?.response || item.sprint.summary;
+  // A round that ended without a handoff gets a generated summary of its steps;
+  // in the group that is a quiet line, the steps stay in the fold.
+  const silent =
+    !item.reply &&
+    !run?.response &&
+    /^\u672c\u8f6e\u5728\u6ca1\u6709\u4ea4\u63a5/.test(item.sprint.summary);
+  const name = member ? memberName(member, t) : title;
+  const from = handoff ? roundMember(handoff.from, members) : undefined;
+  // What changed in the map this round, and the advisor's verdicts: said out loud.
+  const changes = item.steps.filter(
+    (step) =>
+      step.action === "update_node" &&
+      ["supported", "refuted", "abandoned"].includes(
+        String((step.detail.after as { status?: string } | undefined)?.status),
+      ),
+  );
+  const advice = item.steps.filter(
+    (step) => step.action === "advice" && step.detail.reason,
+  );
   return (
-    <RunTurn
-      run={run}
-      role={role}
-      title={title}
-      final={
-        item.sprint.status === "running"
-          ? ""
-          : item.reply || run?.response || item.sprint.summary
-      }
-      elapsed={Math.max(
-        0,
-        (Date.parse(item.sprint.updated_at) -
-          Date.parse(item.sprint.created_at)) /
-          1000,
-      )}
-      footer={
-        item.sprint.status !== "running" && (
-          <MessageActions
-            text={item.reply || run?.response || item.sprint.summary}
-            at={item.replyAt || item.sprint.updated_at}
-            sprintId={item.sprint.commit_sha ? item.sprint.id : undefined}
-            actions={actions}
-          />
-        )
-      }
-    >
-      {run?.runtime.rule && project.workspace_id && (
-        <a
-          className={settingStyles.ruleLink}
-          href={`#${ruleHash(project.workspace_id, run.runtime.rule.workflow, run.runtime.rule.workflow_version, run.runtime.rule.rule)}`}
+    <div className={styles.roundRow}>
+      <span className={styles.roundAvatar}>
+        <MemberAvatar member={member} seed={member ? undefined : role} />
+      </span>
+      <div className={styles.roundBody}>
+        <header className={styles.roundHead}>
+          <strong>{name}</strong>
+          <span>{t("team.agent")}</span>
+          <time dateTime={item.sprint.created_at}>
+            {new Date(item.sprint.created_at).toLocaleTimeString([], {
+              hour: "2-digit",
+              minute: "2-digit",
+            })}
+          </time>
+        </header>
+        {handoff && (
+          <p className={styles.handoff}>
+            <span>
+              {t("research.group.handoff", {
+                from: from
+                  ? memberName(from, t)
+                  : t(`research.role.${handoff.from}` as MessageKey),
+              })}
+            </span>
+            {handoff.text.replaceAll("\\n", " ").split("\n")[0].slice(0, 240)}
+          </p>
+        )}
+        <RunTurn
+          run={run}
+          role={role}
+          title={title}
+          final={
+            item.sprint.status === "running"
+              ? ""
+              : item.reply || run?.response || item.sprint.summary
+          }
+          elapsed={Math.max(
+            0,
+            (Date.parse(item.sprint.updated_at) -
+              Date.parse(item.sprint.created_at)) /
+              1000,
+          )}
+          footer={
+            item.sprint.status !== "running" && (
+              <MessageActions
+                text={item.reply || run?.response || item.sprint.summary}
+                at={item.replyAt || item.sprint.updated_at}
+                sprintId={item.sprint.commit_sha ? item.sprint.id : undefined}
+                actions={actions}
+              />
+            )
+          }
         >
-          {run.runtime.rule.rule}
-        </a>
+          {run?.runtime.rule &&
+            project.workspace_id &&
+            !builtinWorkflow(run.runtime.rule.workflow) && (
+              <a
+                className={settingStyles.ruleLink}
+                href={`#${ruleHash(project.workspace_id, run.runtime.rule.workflow, run.runtime.rule.workflow_version, run.runtime.rule.rule)}`}
+              >
+                {run.runtime.rule.rule}
+              </a>
+            )}
+          {item.jobs.map((job) => (
+            <RunCard
+              key={job.id}
+              job={job}
+              computes={computes}
+              actions={actions}
+            />
+          ))}
+          {item.sprint.commit_sha && item.sprint.status !== "running" && (
+            <CheckpointCard
+              id={project.id}
+              sprintId={item.sprint.id}
+              refreshKey={project.updated_at + project.status}
+              onReview={(path) => actions.review?.(item.sprint.id, path)}
+            />
+          )}
+        </RunTurn>
+        {silent && item.sprint.status !== "running" && (
+          <p className={styles.systemLine}>{t("research.group.noHandoff")}</p>
+        )}
+        {changes.map((step) => (
+          <EvidenceCard key={step.id} step={step} />
+        ))}
+        {advice.map((step) => (
+          <AdviceLine key={step.id} step={step} members={members} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/** A hypothesis changed state: which, from what to what, and the reason given. */
+function EvidenceCard({ step }: { step: Step }) {
+  const { t } = useI18n();
+  const before = String(
+    (step.detail.before as { status?: string })?.status || "active",
+  );
+  const after = String(
+    (step.detail.after as { status?: string })?.status || "",
+  );
+  const reason = String(step.detail.reason || "");
+  return (
+    <div className={styles.evidence} data-status={after}>
+      <div className={styles.evidenceHead}>
+        <span className={styles.evidenceNode}>{step.node}</span>
+        <span className={styles.nodeState} data-status={before}>
+          {t(`research.node.${before}` as MessageKey)}
+        </span>
+        <span aria-hidden>→</span>
+        <span className={styles.nodeState} data-status={after}>
+          {t(`research.node.${after}` as MessageKey)}
+        </span>
+      </div>
+      {reason && !/^[a-z_]+$/.test(reason) && (
+        <p>{reason.replaceAll("\\n", "\n")}</p>
       )}
-      {item.sprint.commit_sha && item.sprint.status !== "running" && (
-        <CheckpointCard
-          id={project.id}
-          sprintId={item.sprint.id}
-          refreshKey={project.updated_at + project.status}
-          onChanged={actions.changed}
-        />
-      )}
-      {item.jobs.map((job) => (
-        <RunCard key={job.id} job={job} computes={computes} actions={actions} />
-      ))}
-    </RunTurn>
+    </div>
+  );
+}
+
+/** The advisor's verdict on a round, as the advisor saying it. */
+function AdviceLine({ step, members }: { step: Step; members: TeamMember[] }) {
+  const { t } = useI18n();
+  const advisor = roundMember("advisor", members);
+  return (
+    <p className={styles.advice}>
+      <MemberAvatar
+        member={advisor}
+        seed={advisor ? undefined : "advisor"}
+        size="sm"
+      />
+      <strong>
+        {advisor ? memberName(advisor, t) : t("research.role.advisor")}
+      </strong>
+      <span>{String(step.detail.reason)}</span>
+    </p>
   );
 }

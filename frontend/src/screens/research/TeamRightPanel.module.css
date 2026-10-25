@@ -1,0 +1,429 @@
+/* A card of its own beside the conversation, as the research thread's panel. */
+.panel {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  width: 360px;
+  min-height: 0;
+  border-left: 1px solid var(--ui-edge-subtle);
+  background: var(--ui-bg);
+}
+
+.panel[data-expanded] {
+  width: min(62%, 980px);
+}
+
+.header {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--ui-space-4);
+  height: var(--ui-sidebar-top);
+  padding: 0 var(--ui-space-8) 0 var(--ui-space-12);
+}
+
+.grow {
+  flex: 1;
+}
+
+.body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+  overflow: auto;
+}
+
+.duty,
+.files {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ui-space-16);
+  padding: var(--ui-space-8) var(--ui-space-12) var(--ui-space-16);
+}
+
+.duty h3,
+.tree h3 {
+  margin: 0 0 var(--ui-space-4);
+  padding: 0 var(--ui-space-4);
+  color: var(--ui-fg-3);
+  font-size: var(--ui-text-12);
+  font-weight: var(--ui-weight-regular);
+}
+
+.desk {
+  display: flex;
+  align-items: center;
+  gap: var(--ui-space-10);
+  width: 100%;
+  padding: var(--ui-space-8);
+  border: 0;
+  border-radius: var(--ui-r-10);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.desk:hover {
+  background: var(--ui-hover);
+}
+
+.avatar {
+  position: relative;
+  display: inline-flex;
+  flex: none;
+  width: var(--ui-space-32);
+  height: var(--ui-space-32);
+}
+
+.avatar > :last-child {
+  position: absolute;
+  right: -1px;
+  bottom: -1px;
+}
+
+.deskText {
+  display: grid;
+  flex: 1;
+  gap: var(--ui-space-2);
+  min-width: 0;
+}
+
+.deskName {
+  color: var(--ui-fg);
+  font-size: var(--ui-text-13);
+  font-weight: var(--ui-weight-strong);
+}
+
+.deskState {
+  overflow: hidden;
+  color: var(--ui-fg-2);
+  font-size: var(--ui-text-12);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.deskState[data-state="working"] {
+  color: var(--ui-info-text);
+}
+
+.deskState[data-state="waiting"] {
+  color: var(--ui-warning-text);
+}
+
+.spend {
+  margin: 0;
+  padding: 0 var(--ui-space-4);
+  color: var(--ui-fg-1);
+  font-size: var(--ui-text-13);
+}
+
+.treeRow,
+.changeRow {
+  display: flex;
+  align-items: center;
+  gap: var(--ui-space-6);
+  width: 100%;
+  height: 28px;
+  padding: 0 var(--ui-space-8);
+  border: 0;
+  border-radius: var(--ui-r-6);
+  background: transparent;
+  color: var(--ui-fg-1);
+  font: inherit;
+  font-size: var(--ui-text-13);
+  text-align: left;
+  cursor: pointer;
+}
+
+.treeRow:hover,
+.changeRow:hover {
+  background: var(--ui-hover);
+}
+
+.treeRow[aria-current] {
+  background: var(--ui-selected);
+  color: var(--ui-fg);
+}
+
+.treeRow svg,
+.changeRow svg {
+  flex: none;
+  color: var(--ui-fg-3);
+}
+
+.treeSpacer {
+  flex: none;
+  width: 14px;
+}
+
+.treeName {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.editorLayout {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+
+.treeColumn {
+  flex: none;
+  width: 240px;
+  padding: var(--ui-space-8) var(--ui-space-6);
+  overflow: auto;
+  border-right: 1px solid var(--ui-edge-subtle);
+}
+
+.editor {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+
+.editorHead {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--ui-space-8);
+  min-height: 40px;
+  padding: 0 var(--ui-space-8) 0 var(--ui-space-12);
+  border-bottom: 1px solid var(--ui-edge-subtle);
+}
+
+.editorPath {
+  display: inline-flex;
+  flex: 1;
+  align-items: center;
+  gap: var(--ui-space-6);
+  min-width: 0;
+  overflow: hidden;
+  color: var(--ui-fg);
+  font-family: var(--ui-font-mono);
+  font-size: var(--ui-text-12);
+  white-space: nowrap;
+}
+
+.dirty {
+  flex: none;
+  width: var(--ui-space-8);
+  height: var(--ui-space-8);
+  border-radius: 50%;
+  background: var(--ui-fg-2);
+}
+
+.code {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  font-family: var(--ui-font-mono);
+  font-size: var(--ui-text-13);
+  line-height: 20px;
+}
+
+.gutter {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  padding: var(--ui-space-8) var(--ui-space-12) var(--ui-space-8)
+    var(--ui-space-8);
+  color: var(--ui-fg-3);
+  text-align: right;
+  user-select: none;
+}
+
+.source {
+  flex: 1;
+  min-width: 0;
+  padding: var(--ui-space-8) var(--ui-space-12) var(--ui-space-8) 0;
+  border: 0;
+  background: transparent;
+  color: var(--ui-fg);
+  font: inherit;
+  line-height: inherit;
+  white-space: pre;
+  resize: none;
+  outline: none;
+  field-sizing: content;
+  min-height: 100%;
+}
+
+.preview {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: var(--ui-space-16) var(--ui-space-20);
+}
+
+.editorFoot {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--ui-space-8);
+  min-height: 40px;
+  padding: 0 var(--ui-space-12);
+  border-top: 1px solid var(--ui-edge-subtle);
+}
+
+.origin {
+  overflow: hidden;
+  color: var(--ui-fg-2);
+  font-size: var(--ui-text-12);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.unsupported {
+  margin: var(--ui-space-16);
+  color: var(--ui-fg-3);
+  font-size: var(--ui-text-13);
+}
+
+.loading {
+  flex: 1;
+}
+
+.changes {
+  margin: 0;
+  padding: var(--ui-space-8);
+  list-style: none;
+}
+
+.added {
+  color: var(--ui-success-text);
+  font-family: var(--ui-font-mono);
+  font-size: var(--ui-text-12);
+}
+
+.removed {
+  color: var(--ui-danger-text);
+  font-family: var(--ui-font-mono);
+  font-size: var(--ui-text-12);
+}
+
+.watch {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ui-space-12);
+  padding: var(--ui-space-8) var(--ui-space-12) var(--ui-space-16);
+}
+
+.watchHead {
+  display: flex;
+  align-items: center;
+  gap: var(--ui-space-8);
+}
+
+.watchAnswer {
+  padding-top: var(--ui-space-8);
+  border-top: 1px solid var(--ui-edge-subtle);
+}
+
+.chime {
+  display: flex;
+  align-items: center;
+  gap: var(--ui-space-4);
+  padding: var(--ui-space-4) var(--ui-space-4) var(--ui-space-4)
+    var(--ui-space-12);
+  border-radius: var(--ui-r-10);
+  background: var(--ui-bg);
+  box-shadow: var(--ui-elev-1);
+}
+
+.chime input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  color: var(--ui-fg);
+  font: inherit;
+  font-size: var(--ui-text-14);
+  outline: none;
+}
+
+.taskRow {
+  display: flex;
+  align-items: center;
+  gap: var(--ui-space-8);
+  min-height: 30px;
+  padding: 0 var(--ui-space-4);
+  font-size: var(--ui-text-13);
+  color: var(--ui-fg-1);
+}
+
+.taskChip {
+  flex: none;
+  padding: 0 var(--ui-space-6);
+  border-radius: var(--ui-r-pill);
+  background: var(--ui-fill);
+  color: var(--ui-fg-2);
+  font-size: var(--ui-text-11);
+  line-height: 18px;
+}
+
+.taskChip[data-state="running"],
+.taskChip[data-state="queued"] {
+  background: color-mix(in oklab, var(--ui-info-text) 14%, transparent);
+  color: var(--ui-info-text);
+}
+
+.taskChip[data-state="completed"] {
+  background: color-mix(in oklab, var(--ui-success-text) 14%, transparent);
+  color: var(--ui-success-text);
+}
+
+.taskChip[data-state="failed"] {
+  background: color-mix(in oklab, var(--ui-danger-text) 12%, transparent);
+  color: var(--ui-danger-text);
+}
+
+.taskWhen {
+  flex: none;
+  color: var(--ui-fg-3);
+  font-size: var(--ui-text-12);
+}
+
+/* On a narrow window the panel covers the conversation instead of squeezing it. */
+@media (max-width: 899px) {
+  .panel {
+    position: absolute;
+    inset: 0 0 0 auto;
+    z-index: 1;
+    width: min(100%, 360px);
+    box-shadow: var(--ui-elev-2);
+  }
+
+  .panel[data-expanded] {
+    width: 100%;
+  }
+}
+
+a.taskRow,
+button.taskRow {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+a.taskRow {
+  border-radius: var(--ui-r-8);
+  color: inherit;
+  text-decoration: none;
+}
+
+a.taskRow:hover,
+button.taskRow:hover {
+  background: var(--ui-hover);
+}

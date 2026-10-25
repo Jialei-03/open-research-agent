@@ -8,7 +8,7 @@ import json
 from copy import deepcopy
 
 from fastapi import HTTPException
-from sqlalchemy import and_, delete, func, or_, select, update
+from sqlalchemy import and_, delete, or_, select, update
 
 from . import team_rules
 from .models import (
@@ -25,6 +25,9 @@ from .models import (
 
 
 def references(d, workspace):
+    present = list(
+        d.scalars(select(TeamMember).where(TeamMember.workspace_id == workspace.id))
+    )
     members = [
         {
             "id": m.id,
@@ -32,12 +35,15 @@ def references(d, workspace):
             "kind": "human" if m.role == "human" else "agent",
             "role": "owner" if m.role == "human" else m.role,
             "enabled": m.enabled and not m.deleted,
+            "paused": m.paused,
             "subscriptions": m.subscriptions,
         }
-        for m in d.scalars(
-            select(TeamMember).where(TeamMember.workspace_id == workspace.id)
-        )
+        for m in present
     ]
+    # Colleagues not yet in the project can still be named; they join when called on.
+    from .team_roster import absent
+
+    members += absent(d, workspace, present)
     channels = [
         {"id": c.id, "name": c.name, "kind": "dm" if c.member_id else "channel"}
         for c in d.scalars(
@@ -53,18 +59,28 @@ def references(d, workspace):
 def pack(source):
     """Upgrade old definitions in place without losing their execution boundary data."""
     if "rules" in source:
-        return deepcopy(source)
+        flow, state = team_rules.deduplicate_workflow(
+            source, source.get("initial_state")
+        )
+        if "initial_state" in source:
+            flow["initial_state"] = state
+        return flow
     flow, state = team_rules.convert_linear_workflow(source)
     return {**flow, "initial_state": state, "execution": deepcopy(source)}
 
 
 def definition(d, owner, identifier="research", *, workspace=None):
     if workspace and workspace.workflow and workspace.workflow["id"] == identifier:
-        return deepcopy(workspace.workflow)
+        return deepcopy(adopt(d, workspace))
     if workspace:
         saved = workspace.workflow_state.get("definitions", {}).get(identifier)
         if saved:
-            return deepcopy(saved)
+            flow, state = team_rules.deduplicate_workflow(
+                saved, workspace.workflow_state
+            )
+            state["definitions"][identifier] = deepcopy(flow)
+            workspace.workflow_state = state
+            return flow
     builtins = team_rules.builtin_workflows()
     if identifier in builtins:
         return builtins[identifier]
@@ -80,7 +96,7 @@ def definition(d, owner, identifier="research", *, workspace=None):
             "builtin": False,
         }
     )
-    if "rules" not in row.definition:
+    if source != row.definition:
         row.definition = source
     return team_rules.validate_workflow(
         {
@@ -104,7 +120,13 @@ def seed(d, workflow):
 
 def adopt(d, workspace):
     if workspace.workflow:
-        return workspace.workflow
+        flow, state = team_rules.deduplicate_workflow(
+            workspace.workflow, workspace.workflow_state
+        )
+        if flow != workspace.workflow:
+            state.setdefault("definitions", {})[flow["id"]] = deepcopy(flow)
+            workspace.workflow, workspace.workflow_state = flow, state
+        return flow
     flow = definition(d, workspace.owner)
     # The native research template listens in the research channel. Other channels
     # stay available for explicit mentions and rules the owner adds.
@@ -255,6 +277,7 @@ def event(
         if author is not None
         else next((m for m in members if m["id"] == message.author_id), None)
     )
+    data = getattr(message, "data", {})
     incoming = dict(
         type=trigger,
         team=workspace.id,
@@ -265,8 +288,12 @@ def event(
         or (message.kind if message.kind in team_rules.KINDS.__args__ else "text"),
         mentions=message.mentions or [],
         at=message.created_at or now(),
-        scope=getattr(message, "data", {}).get("routing_scope"),
+        scope=data.get("routing_scope"),
         pending_members=[row.member_id for row in unstarted(d, message)],
+        original_author=next(
+            (m for m in members if m["id"] == data.get("decision_author_id")),
+            None,
+        ),
     )
     state = deepcopy(workspace.workflow_state)
     state.setdefault("snapshots", {}).setdefault(
@@ -311,8 +338,7 @@ def provenance(flow, action):
 
 
 def unstarted(d, message):
-    root = message.thread_id or getattr(message, "id", None)
-    if root is None:
+    if message.thread_id is None and getattr(message, "id", None) is None:
         return []  # Timer events have no message or thread to merge.
     return list(
         d.scalars(
@@ -324,7 +350,7 @@ def unstarted(d, message):
             )
             .where(
                 TeamMessage.channel_id == message.channel_id,
-                func.coalesce(TeamMessage.thread_id, TeamMessage.id) == root,
+                TeamMessage.thread_id == message.thread_id,
                 or_(
                     and_(
                         TeamDelivery.status == "queued", TeamDelivery.run_id.is_(None)
@@ -338,6 +364,14 @@ def unstarted(d, message):
 
 
 def apply(d, workspace, message, flow, actions):
+    from .team_roster import call_on
+
+    call_on(
+        d,
+        workspace,
+        [a["member"] for a in actions if a["action"] in {"wake", "review"}],
+        channel_id=message.channel_id,
+    )
     for action in actions:
         metadata = provenance(flow, action)
         if action["action"] in {"wake", "review"}:
@@ -377,12 +411,12 @@ def apply(d, workspace, message, flow, actions):
                         )
                     )
                     if existing.run_id:
-                        from .research_team import message_out
+                        from .team_member_context import trigger_text
 
                         run = d.get(AgentRun, existing.run_id)
-                        extra = message_out(d, d.get(TeamMessage, message.id))["text"]
+                        extra = trigger_text(d, d.get(TeamMessage, message.id))
                         if action.get("instruction"):
-                            extra += "\n\n" + action["instruction"]
+                            extra += "\n\nRule instruction:\n" + action["instruction"]
                         changed = d.execute(
                             update(AgentRun)
                             .where(
@@ -438,7 +472,9 @@ def apply(d, workspace, message, flow, actions):
                         else None
                     ),
                     kind=(
-                        "relay_limit"
+                        "member_paused"
+                        if action["action"] == "skip"
+                        else "relay_limit"
                         if action["action"] in {"wait_for_owner", "limit"}
                         else "text"
                     ),
@@ -446,6 +482,9 @@ def apply(d, workspace, message, flow, actions):
                     data={
                         **metadata,
                         "reason": action.get("reason"),
+                        "paused_member": action.get("member")
+                        if action["action"] == "skip"
+                        else None,
                         "limit": action.get("limit"),
                         "waiting": action["action"] == "wait_for_owner",
                         "rule_event_pending": action["action"] == "post",
@@ -471,6 +510,8 @@ def route_message(d, workspace, message, *, trigger="message"):
 
     from .research_team import active_run, channel_of
 
+    if message.data.get("mode") == "record":
+        return []
     channel = channel_of(d, workspace, message.channel_id)
     tagged = list(message.mentions or [])
     author = d.get(TeamMember, message.author_id) if message.author_id else None
@@ -482,7 +523,7 @@ def route_message(d, workspace, message, *, trigger="message"):
     if channel.member_id and author and author.role == "human" and not tagged:
         tagged = [channel.member_id]
     flow = None
-    thread = message.thread_id or (message.id if tagged else None)
+    thread = message.thread_id
     if thread and thread.startswith("research:"):
         project = d.get(ResearchProject, thread[9:])
         from .research_workflows import adopt_project
@@ -511,14 +552,6 @@ def route_message(d, workspace, message, *, trigger="message"):
                 )
                 if active_run(d, m) and m.role != "human"
             ][:1]
-    elif author and author.role != "human" and not message.thread_id and tagged:
-        thread = message.id
-        state = deepcopy(workspace.workflow_state)
-        old = json.dumps([workspace.id, channel.id, None], separators=(",", ":"))
-        new = json.dumps([workspace.id, channel.id, thread], separators=(",", ":"))
-        if old in state.get("threads", {}) and new not in state["threads"]:
-            state["threads"][new] = deepcopy(state["threads"][old])
-        workspace.workflow_state = state
     proxy = SimpleNamespace(
         id=message.id,
         channel_id=message.channel_id,
@@ -537,7 +570,6 @@ def route_message(d, workspace, message, *, trigger="message"):
                 "enabled": True,
                 "when": {"event": "conclusion_proposed"},
                 "then": {"action": "wait_for_owner"},
-                "limit": {"per_thread": 1000000},
             }
         ]
         trigger = "conclusion_proposed"
@@ -615,10 +647,12 @@ def prime(project, state, channel, team, members=None):
             target = f"step:{mapped[i]}"
             for rule in project.workflow["rules"]:
                 then = rule["then"]
-                if (
-                    then["action"] != "review"
-                    or routes.get(rule["id"], {}).get("to") != target
+                if then["action"] != "review" or not any(
+                    route.get("to") == target
+                    for route in team_rules.route_options(routes.get(rule["id"]))
                 ):
+                    continue
+                if reviews.get(rule["id"], {}).get("pending"):
                     continue
                 reviews[rule["id"]] = {
                     "reviewer": team_rules._resolve(
@@ -630,6 +664,7 @@ def prime(project, state, channel, team, members=None):
                     "returns": (
                         step_states[i].get("retries", 0) if i < len(step_states) else 0
                     ),
+                    "cursor": target,
                     "pending": i == index and project.status == "active",
                 }
     partition["workflows"][wk] = {"counts": {}, "reviews": reviews, "cursor": cursor}
@@ -735,8 +770,15 @@ def research_event(
         state["routed_source"] = source
     project.workflow_state = state
     if workspace and actions:
+        from .team_roster import call_on
+
+        call_on(
+            d,
+            workspace,
+            [a["member"] for a in actions if a["action"] in {"wake", "review"}],
+        )
         for action in actions:
-            if action["action"] in {"post", "wait_for_owner", "limit"}:
+            if action["action"] in {"post", "wait_for_owner", "limit", "skip"}:
                 waiting = action["action"] == "wait_for_owner"
                 stopped = action["action"] in {"wait_for_owner", "limit"}
                 d.add(
@@ -748,7 +790,11 @@ def research_event(
                             if action.get("channel", channel_id) == channel_id
                             else None
                         ),
-                        kind="relay_limit" if stopped else "text",
+                        kind="member_paused"
+                        if action["action"] == "skip"
+                        else "relay_limit"
+                        if stopped
+                        else "text",
                         text=action.get("text") or "",
                         mentions=[m["id"] for m in members if m["role"] == "owner"]
                         if stopped
@@ -757,8 +803,11 @@ def research_event(
                             **provenance(flow, action),
                             "waiting": waiting,
                             "reason": action.get("reason"),
+                            "paused_member": action.get("member")
+                            if action["action"] == "skip"
+                            else None,
                             "limit": action.get("limit"),
-                            "rule_event_pending": not stopped,
+                            "rule_event_pending": action["action"] == "post",
                         },
                     )
                 )

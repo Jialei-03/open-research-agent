@@ -1,0 +1,514 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>ORA 研究原型：进度板 + 研究群</title>
+<style>
+:root{
+  --shell:#f5f4ef; --card:#fdfcf9; --inset:#efede7; --elev:#fff;
+  --fg:#1f1e1c; --fg1:#4a4743; --fg2:#6f6b66; --fg3:#9a958f;
+  --edge:rgba(31,30,28,.10); --edge2:rgba(31,30,28,.16); --hover:rgba(31,30,28,.05); --sel:rgba(31,30,28,.08);
+  --clay:#c96442; --blue:#2f6fd0; --bluebg:#e8eff9; --green:#2e7d4f; --greenbg:#e6f2ea; --amber:#9a6a00; --amberbg:#fbf0d6; --red:#b3392f; --redbg:#f8e5e2;
+  --serif:"Songti SC","Source Han Serif SC",Georgia,serif; --mono:"JetBrains Mono",ui-monospace,Menlo,monospace;
+}
+*{box-sizing:border-box} body{margin:0;background:#e9e7e1;font:13px/1.5 -apple-system,"PingFang SC","Inter",sans-serif;color:var(--fg)}
+.tabs{position:sticky;top:0;z-index:5;display:flex;gap:6px;flex-wrap:wrap;padding:10px 16px;background:#e9e7e1;border-bottom:1px solid var(--edge)}
+.tabs button{font:inherit;border:0;background:transparent;padding:6px 12px;border-radius:999px;color:var(--fg1);cursor:pointer}
+.tabs button.on{background:var(--fg);color:#fff}
+.note{max-width:1440px;margin:12px auto 0;padding:0 16px;color:var(--fg1);font-size:13px}
+.frame{width:1440px;height:900px;margin:12px auto 40px;background:var(--shell);display:flex;padding:8px 8px 8px 0;border-radius:12px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.08)}
+.screen{display:none}.screen.on{display:block}
+.rail{width:52px;display:flex;flex-direction:column;align-items:center;gap:4px;padding:8px 0 12px}
+.ri{width:36px;height:36px;border-radius:10px;display:grid;place-items:center;color:var(--fg2);position:relative}
+.ri.on{background:var(--card);color:var(--fg);box-shadow:0 0 0 1px var(--edge),0 1px 2px rgba(0,0,0,.05)}
+.ri .dot{position:absolute;top:6px;right:6px;width:7px;height:7px;border-radius:50%;background:var(--red)}
+.side{width:264px;display:flex;flex-direction:column;padding:0 8px}
+.top{height:52px;display:flex;align-items:center;gap:8px;padding:0 4px 0 8px}
+.proj{font-weight:600;font-size:14px;display:flex;align-items:center;gap:6px}
+.sp{flex:1}
+.ib{width:28px;height:28px;border-radius:8px;display:grid;place-items:center;color:var(--fg2)}
+.nav{height:34px;display:flex;align-items:center;gap:10px;padding:0 10px;border-radius:8px;font-size:14px;color:var(--fg1)}
+.nav.on{background:var(--sel);color:var(--fg)}
+.cnt{margin-left:auto;font-size:12px;color:var(--fg3)}
+.pill{margin-left:auto;font-size:11px;padding:1px 7px;border-radius:999px;background:var(--amberbg);color:var(--amber)}
+.sh{height:26px;display:flex;align-items:center;padding:0 6px 0 10px;margin-top:14px;color:var(--fg3);font-size:12px;letter-spacing:.02em}
+.row{display:flex;align-items:center;gap:8px;padding:6px 10px;border-radius:8px;min-height:44px}
+.row.on{background:var(--sel)}
+.row .t{flex:1;min-width:0}
+.row .n{font-size:13px;color:var(--fg);display:flex;gap:6px;align-items:baseline}
+.row .p{font-size:12px;color:var(--fg2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.row time{font-size:11px;color:var(--fg3);margin-left:auto}
+.row .w{color:var(--blue)}
+.av{width:28px;height:28px;border-radius:50%;display:grid;place-items:center;font-size:12px;font-weight:600;flex:none;position:relative}
+.av.sm{width:22px;height:22px;font-size:10px}.av.lg{width:44px;height:44px;font-size:16px}
+.av .s{position:absolute;right:-1px;bottom:-1px;width:9px;height:9px;border-radius:50%;border:2px solid var(--shell)}
+.s.work{background:var(--blue)}.s.idle{background:#b9b4ac}.s.wait{background:#d49a1d}.s.off{background:#ddd}
+.a1{background:#e8e2f8;color:#4b3d8f}.a2{background:#dff1ea;color:#1d6b52}.a3{background:#fbe7dc;color:#8a3d1d}.a4{background:#e3eefb;color:#1d4f8a}.a5{background:#f6e5ee;color:#86324f}.me{background:#2b2a27;color:#fff}
+.hash{width:28px;height:28px;border-radius:8px;background:var(--inset);display:grid;place-items:center;color:var(--fg2);font-weight:600;flex:none}
+.cards{flex:1;display:flex;gap:8px;min-width:0}
+.main{flex:1;background:var(--card);border-radius:16px;box-shadow:0 0 0 1px var(--edge),0 1px 2px rgba(0,0,0,.04);display:flex;flex-direction:column;min-width:0;overflow:hidden}
+.panel{width:340px;background:var(--card);border-radius:16px;box-shadow:0 0 0 1px var(--edge),0 1px 2px rgba(0,0,0,.04);display:flex;flex-direction:column;overflow:hidden}
+.head{height:52px;display:flex;align-items:center;gap:10px;padding:0 12px 0 20px;border-bottom:1px solid var(--edge)}
+.head h1{font-size:14px;font-weight:600;margin:0}
+.head .m{font-size:12px;color:var(--fg2)}
+.flow{flex:1;overflow:hidden;padding:16px 0}
+.col{width:720px;margin:0 auto;display:flex;flex-direction:column;gap:14px}
+.msg{display:flex;gap:10px}
+.msg .b{flex:1;min-width:0}
+.who{font-size:13px;font-weight:600;display:flex;gap:8px;align-items:baseline}
+.who span{font-weight:400;font-size:11px;color:var(--fg3)}
+.txt{font-size:14.5px;line-height:1.7;color:var(--fg)}
+.mine{align-self:flex-end;max-width:70%;background:var(--bluebg);border-radius:18px 18px 6px 18px;padding:9px 14px;font-size:14.5px;line-height:1.6}
+.mine b{color:var(--blue);font-weight:500}
+.card{background:var(--elev);border-radius:12px;box-shadow:0 0 0 1px var(--edge),0 1px 2px rgba(0,0,0,.04);padding:12px 14px}
+.chip{display:inline-flex;align-items:center;gap:5px;height:22px;padding:0 8px;border-radius:999px;font-size:11.5px;background:var(--inset);color:var(--fg1)}
+.chip.run{background:var(--bluebg);color:var(--blue)}.chip.ok{background:var(--greenbg);color:var(--green)}.chip.wait{background:var(--amberbg);color:var(--amber)}.chip.err{background:var(--redbg);color:var(--red)}
+.btn{display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 12px;border-radius:999px;font-size:12.5px;box-shadow:inset 0 0 0 1px var(--edge2);color:var(--fg);background:transparent}
+.btn.pri{background:var(--fg);color:#fff;box-shadow:none}
+.steps{margin:8px 0 0;padding:0;list-style:none;display:flex;flex-direction:column;gap:4px}
+.steps li{display:flex;gap:8px;align-items:center;font-size:12.5px;color:var(--fg1)}
+.steps li i{width:14px;text-align:center;font-style:normal;color:var(--fg3)}
+.steps li.d i{color:var(--green)}.steps li.n i{color:var(--blue)}
+.mono{font-family:var(--mono);font-size:12px}
+.file{display:flex;align-items:center;gap:8px;padding:6px 10px;border-radius:8px;background:var(--inset);font-size:12.5px;margin-top:6px}
+.file .x{margin-left:auto;color:var(--fg2);font-size:12px}
+.comp{width:720px;margin:0 auto 14px;background:var(--elev);border-radius:20px;box-shadow:0 0 0 1px var(--edge2),0 2px 4px rgba(0,0,0,.03),0 12px 28px -12px rgba(0,0,0,.12);padding:10px 10px 10px 14px}
+.comp .ph{min-height:40px;font-size:14.5px;color:var(--fg3);padding:4px 2px}
+.comp .bar{display:flex;align-items:center;gap:6px}
+.cc{height:30px;padding:0 10px;border-radius:999px;display:inline-flex;align-items:center;gap:6px;color:var(--fg1);font-size:12.5px}
+.send{width:34px;height:34px;border-radius:50%;background:var(--fg);color:#fff;display:grid;place-items:center;margin-left:auto}
+.ptabs{display:flex;gap:2px;padding:10px 12px;border-bottom:1px solid var(--edge)}
+.ptabs span{padding:4px 10px;border-radius:999px;font-size:12.5px;color:var(--fg2)}
+.ptabs span.on{background:var(--sel);color:var(--fg)}
+.pbody{flex:1;overflow:hidden;padding:12px 14px;display:flex;flex-direction:column;gap:14px}
+.ph3{font-size:12px;color:var(--fg3);margin-bottom:6px;display:flex;align-items:center}
+.desk{display:flex;gap:10px;align-items:flex-start;padding:8px;border-radius:10px}
+.desk:hover{background:var(--hover)}
+.desk .t{flex:1;min-width:0}
+.desk .nm{font-size:13px;font-weight:600;display:flex;gap:6px;align-items:center}
+.desk .st{font-size:12px;color:var(--fg2);margin-top:1px}
+.bar2{height:4px;border-radius:2px;background:var(--inset);margin-top:6px;overflow:hidden}.bar2 i{display:block;height:100%;background:var(--blue)}
+.brief{border-radius:12px;background:var(--inset);padding:12px 14px}
+.brief h4{margin:0 0 6px;font-size:13px}
+.brief li{font-size:13px;color:var(--fg1);margin:2px 0}
+.term{background:#1f1e1c;color:#e9e6df;border-radius:10px;padding:10px 12px;font-family:var(--mono);font-size:11.5px;line-height:1.6}
+.term .g{color:#8fd19e}.term .y{color:#e8c46b}.term .c{color:#9a958f}
+.map{display:flex;flex-direction:column;gap:4px}
+.node{font-size:12.5px;padding:5px 8px;border-radius:8px;display:flex;gap:6px;align-items:center}
+.node.l1{margin-left:0;font-weight:600}.node.l2{margin-left:14px}.node.l3{margin-left:28px}
+.tag{font-size:11px;padding:0 6px;border-radius:999px;margin-left:auto}
+.tag.ok{background:var(--greenbg);color:var(--green)}.tag.no{background:var(--redbg);color:var(--red)}.tag.run{background:var(--bluebg);color:var(--blue)}.tag.idle{background:var(--inset);color:var(--fg2)}
+.inbox .item{display:flex;gap:12px;padding:14px 16px;border-bottom:1px solid var(--edge)}
+.inbox .item .t{flex:1}
+.inbox h3{margin:0;font-size:14px}
+.inbox p{margin:3px 0 0;font-size:13px;color:var(--fg1)}
+.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+.mcard{background:var(--elev);border-radius:12px;box-shadow:0 0 0 1px var(--edge);padding:14px}
+.mcard .r{font-size:12.5px;color:var(--fg2);margin-top:6px}
+.serif{font-family:var(--serif);font-weight:400}
+.overlay{position:absolute;inset:0;background:rgba(20,20,18,.35);display:flex;align-items:center;justify-content:center;border-radius:16px}
+.dlg{width:520px;background:var(--elev);border-radius:24px;box-shadow:0 20px 60px rgba(0,0,0,.25);padding:22px 24px}
+.fld{border-radius:10px;box-shadow:inset 0 0 0 1px var(--edge2);padding:9px 12px;font-size:13.5px;color:var(--fg)}
+.lbl{font-size:12px;color:var(--fg2);margin:12px 0 6px}
+.k{font-size:11px;color:var(--fg3)}
+.rail{width:60px}
+.pt{width:38px;height:38px;border-radius:11px;display:grid;place-items:center;font-weight:600;font-size:14px;position:relative;cursor:pointer}
+.pt.on{box-shadow:0 0 0 2px var(--fg)}
+.pt .bd{position:absolute;right:-5px;top:-5px;min-width:16px;height:16px;padding:0 4px;border-radius:8px;background:#d49a1d;color:#fff;font-size:10px;display:grid;place-items:center;border:2px solid var(--shell)}
+.pt .wk{position:absolute;right:-3px;bottom:-3px;width:10px;height:10px;border-radius:50%;background:var(--blue);border:2px solid var(--shell)}
+.pt.all{background:var(--card);color:var(--fg1);box-shadow:0 0 0 1px var(--edge)}
+.pt.all.on{box-shadow:0 0 0 2px var(--fg)}
+.rsep{width:24px;height:1px;background:var(--edge2);margin:6px 0}
+.seg{display:flex;gap:2px;background:var(--inset);border-radius:999px;padding:2px;margin:0 2px 8px}
+.seg span{flex:1;text-align:center;padding:4px 0;border-radius:999px;font-size:12.5px;color:var(--fg2)}
+.seg span.on{background:var(--elev);color:var(--fg);box-shadow:0 0 0 1px var(--edge)}
+.col3{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;padding:16px 20px;align-items:start}
+.lane h4{margin:0 0 8px;font-size:12.5px;color:var(--fg2);font-weight:500;display:flex;gap:6px}
+.kc{background:var(--elev);border-radius:10px;box-shadow:0 0 0 1px var(--edge);padding:10px 12px;margin-bottom:8px;font-size:13px}
+.kc .m{display:flex;align-items:center;gap:6px;margin-top:8px;font-size:11.5px;color:var(--fg2)}
+.tree div{padding:3px 8px;border-radius:6px;font-size:12.5px;display:flex;gap:6px;color:var(--fg1)}
+.tree div.on{background:var(--sel);color:var(--fg)}
+.tree .g{margin-left:auto;font-size:11px}
+.ftabs{display:flex;gap:2px;padding:6px 10px;border-bottom:1px solid var(--edge)}
+.ftabs span{padding:4px 10px;border-radius:8px;font-size:12.5px;color:var(--fg2)}
+.ftabs span.on{background:var(--sel);color:var(--fg)}
+.code{font-family:var(--mono);font-size:12.5px;line-height:1.75;padding:12px 0}
+.code div{display:flex}.code i{width:44px;text-align:right;padding-right:14px;color:var(--fg3);font-style:normal}
+.code .add{background:rgba(46,125,79,.08)}
+.md h2{font-family:var(--serif);font-weight:400;font-size:22px;margin:0 0 10px}
+.md p,.md li{font-size:14px;line-height:1.75;color:var(--fg)}
+
+.pt{background:transparent!important;color:var(--fg2)!important}.pt.on{background:var(--sel)!important;box-shadow:none!important;color:var(--fg)!important}
+.stage{display:flex;align-items:center;margin:6px 0 2px}
+.stage .s{display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--fg3)}
+.stage .s b{width:20px;height:20px;border-radius:50%;display:grid;place-items:center;font-size:11px;background:var(--inset);color:var(--fg2);font-weight:600}
+.stage .s.d b{background:var(--greenbg);color:var(--green)}.stage .s.n b{background:var(--blue);color:#fff}.stage .s.n{color:var(--fg);font-weight:600}
+.stage .l{flex:1;height:2px;background:var(--edge2);margin:0 10px;min-width:30px}.stage .l.d{background:var(--green)}
+.now{background:var(--bluebg);border-radius:12px;padding:12px 14px;font-size:14px;line-height:1.6;display:flex;gap:10px;align-items:flex-start}
+.now .live{width:8px;height:8px;border-radius:50%;background:var(--blue);margin-top:7px;flex:none;box-shadow:0 0 0 4px rgba(47,111,208,.15)}
+.hyp{display:grid;grid-template-columns:34px 1fr auto auto;gap:10px;align-items:center;padding:10px 12px;border-radius:10px;font-size:13.5px}
+.hyp:hover{background:var(--hover)}
+.hyp .id,.node .id{font-family:var(--mono);font-size:12px;color:var(--fg2)}
+.hyp .ev{font-size:12px;color:var(--fg2)}
+.lnk{font-size:12px;color:var(--blue);white-space:nowrap;cursor:pointer}
+.metrics{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+.metric{background:var(--inset);border-radius:10px;padding:10px 12px}
+.metric .v{font-size:20px;font-weight:600;margin-top:2px}
+.spark{height:28px;width:100%;margin-top:4px}
+.decide{border-radius:12px;box-shadow:inset 0 0 0 1px #e8c46b;background:var(--amberbg);padding:12px 14px}
+.decide h4{margin:0 0 4px;font-size:13.5px}
+.opt{display:flex;gap:6px;margin-top:10px}
+.handoff{font-size:12.5px;color:var(--fg2);display:flex;gap:6px;align-items:center;margin:2px 0 4px}
+.handoff b{color:var(--fg1);font-weight:500}
+.cond{display:inline-block;margin-top:6px;font-size:12px;color:var(--fg2);background:var(--inset);border-radius:6px;padding:2px 8px}
+.prog{height:6px;border-radius:3px;background:var(--inset);overflow:hidden;margin:8px 0 4px}.prog i{display:block;height:100%;background:var(--blue)}
+.why{border-left:3px solid var(--green);padding:6px 0 6px 12px;margin-top:8px;font-size:13px;color:var(--fg1)}
+.why.no{border-color:var(--red)}
+.tbl{width:100%;border-collapse:collapse;font-size:12.5px;margin-top:8px}.tbl td,.tbl th{padding:5px 8px;border-bottom:1px solid var(--edge);text-align:left}.tbl th{color:var(--fg2);font-weight:500}
+.fig{height:90px;border-radius:8px;background:var(--inset);margin-top:8px}
+.pop{position:absolute;width:380px;background:var(--elev);border-radius:14px;box-shadow:0 0 0 1px var(--edge),0 16px 40px rgba(0,0,0,.18);padding:14px 16px;font-size:13.5px;line-height:1.7;z-index:3}
+.pop h5{margin:0 0 6px;font-size:13px;display:flex;gap:6px;align-items:center}
+.banner{display:flex;gap:8px;align-items:center;padding:8px 20px;background:var(--inset);font-size:12.5px;color:var(--fg1);border-bottom:1px solid var(--edge)}
+.tl{position:relative;padding-left:22px}
+.tl:before{content:"";position:absolute;left:7px;top:4px;bottom:4px;width:2px;background:var(--edge2)}
+.ev2{position:relative;margin-bottom:16px}
+.ev2:before{content:"";position:absolute;left:-19px;top:5px;width:10px;height:10px;border-radius:50%;background:var(--card);box-shadow:inset 0 0 0 2px var(--fg3)}
+.ev2.k:before{box-shadow:inset 0 0 0 2px var(--blue);background:var(--bluebg)}
+.ev2.x:before{box-shadow:inset 0 0 0 2px var(--red);background:var(--redbg)}
+.ev2.o:before{box-shadow:inset 0 0 0 2px var(--green);background:var(--greenbg)}
+.ev2 .d{font-size:11.5px;color:var(--fg3)}
+.ev2 .h{font-size:13.5px;font-weight:600;margin:2px 0}
+.ev2 .p{font-size:13px;color:var(--fg1)}
+.scrub{height:44px;display:flex;align-items:center;gap:10px;padding:0 20px;border-top:1px solid var(--edge);font-size:12px;color:var(--fg2)}
+.scrub .tr{flex:1;height:4px;background:var(--inset);border-radius:2px;position:relative}
+.scrub .tr i{position:absolute;left:0;top:0;bottom:0;width:62%;background:var(--fg);border-radius:2px}
+.scrub .tr b{position:absolute;left:62%;top:-5px;width:14px;height:14px;border-radius:50%;background:var(--fg);transform:translateX(-50%)}
+.tgl{width:34px;height:20px;border-radius:999px;background:var(--inset);position:relative;flex:none;box-shadow:inset 0 0 0 1px var(--edge2)}
+.tgl.on{background:var(--fg)}
+.tgl:after{content:"";position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:50%;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.2)}
+.tgl.on:after{left:16px}
+.setrow{display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--edge);font-size:13.5px}
+.rcard{background:var(--elev);border-radius:12px;box-shadow:0 0 0 1px var(--edge);padding:12px 14px;display:flex;gap:12px;align-items:center}
+.rcard .ic{width:34px;height:34px;border-radius:10px;background:var(--amberbg);color:var(--clay);display:grid;place-items:center;font-size:16px}
+.hl{background:var(--bluebg)}
+.panel .stage .s{white-space:nowrap;font-size:11.5px}.panel .stage .l{min-width:10px;margin:0 6px}
+</style>
+</head>
+<body>
+<div class="tabs" id="tabs"></div>
+<div class="note" id="note"></div>
+<!-- 1 进度板 -->
+<section class="screen" data-name="1 研究 = 进度板" data-note="打开一个研究，看到的是一块进度板，回答「到哪了」：置顶一句话现状（自动更新）、阶段条、假设清单（每条的状态和依据）、已经跑出来的关键数字、等你决定的事。每一项旁边都有「看讨论」——点了跳到研究群里讨论它的那段对话。右侧是研究群的实时动态，过程就在旁边，不用切走。">
+<div class="frame">
+ <div class="rail"></div>
+ <div class="side">
+  <div class="top" data-name="UX体验-小模型自我验证"></div>
+  <div class="nav"><span>⚑</span>待你决定<span class="pill">1</span></div>
+  <div class="nav"><span>▦</span>看板</div>
+  <div class="sh">研究</div>
+  <div class="row on"><div class="hash" style="color:var(--clay)">◈</div><div class="t"><div class="n">GSM8K 采样策略<time>14:46</time></div><div class="p w">H2 进行中 · 120/200 题</div></div></div>
+  <div class="sh">群聊</div>
+  <div class="row"><div class="hash">#</div><div class="t"><div class="n">全员<time>14:02</time></div><div class="p">导师：开了研究「GSM8K 采样策略」</div></div></div>
+  <div class="row"><div class="hash" style="color:var(--clay)">◈</div><div class="t"><div class="n">GSM8K 采样策略<time>14:46</time></div><div class="p w">执行者：H2 跑到 120/200</div></div></div>
+  <div class="sh">私聊</div>
+  <div class="row"><div class="av a4">导<span class="s idle"></span></div><div class="t"><div class="n">导师<time>14:40</time></div><div class="p">好，我让评审再看一下 H3</div></div></div>
+  <div class="row"><div class="av a3">执<span class="s work"></span></div><div class="t"><div class="n">执行者<time>14:46</time></div><div class="p w">正在跑 H2 · 剩 18 分钟</div></div></div>
+ </div>
+ <div class="cards">
+  <div class="main">
+   <div class="head"><span style="color:var(--clay)">◈</span><h1>GSM8K 采样策略：maj@8 vs 自我验证 best-of-8</h1><div class="sp"></div><span class="btn">🔔 叫我</span><span class="btn">⟲ 回放</span><div class="ib">⋯</div></div>
+   <div class="flow" style="overflow:auto"><div class="col" style="gap:18px">
+    <div class="now"><span class="live"></span><div><b>现在：</b>H1 已完成（管线可用、抽取率 96%）。执行者在跑 H2 的 maj@8 基线，<b>120/200 题</b>，目前准确率 81.5%，约 18 分钟后完成。下一步：评审核对 H3 的打分方式。</div></div>
+    <div class="stage"><div class="s d"><b>✓</b>定题</div><div class="l d"></div><div class="s d"><b>✓</b>计划</div><div class="l d"></div><div class="s n"><b>3</b>实验</div><div class="l"></div><div class="s"><b>4</b>结论</div></div>
+    <div class="decide"><h4>等你决定 · 导师 14:44</h4><div style="font-size:13.5px;color:var(--fg1)">H3 的 AUC 目前只有 1 个种子。补到 3 个种子，预计多跑 1 小时、约 20 万 token。</div><div class="opt"><span class="btn pri">补跑 3 个种子</span><span class="btn">先用 1 个种子</span><span class="btn">看讨论</span></div></div>
+    <div>
+     <div class="ph3">假设</div>
+     <div class="hyp"><span class="id">H1</span><span>引擎与数据管线就绪：10 题 × 8 样本 pilot<div class="ev">依据：抽取率 96%，单题 4.2 秒 · <span class="lnk">结果</span></div></span><span class="chip ok">已完成</span><span class="lnk">看讨论</span></div>
+     <div class="hyp hl"><span class="id">H2</span><span>maj@8 基线与贪心参照（200 题 × 8 采样）<div class="ev">执行者 · 120/200 · 剩 18 分钟</div></span><span class="chip run">● 进行中</span><span class="lnk">看讨论</span></div>
+     <div class="hyp"><span class="id">H3</span><span>自我验证打分的 AUC（止损：AUC &lt; 0.55 即停）<div class="ev">等你决定种子数</div></span><span class="chip wait">等你</span><span class="lnk">看讨论</span></div>
+     <div class="hyp"><span class="id">H4</span><span>同一候选池上配对比较 + McNemar<div class="ev">排在 H2、H3 之后</div></span><span class="chip">排队</span><span class="lnk">看讨论</span></div>
+     <div class="hyp"><span class="id">H5</span><span>oracle 上界与加权投票<div class="ev">排在 H4 之后</div></span><span class="chip">排队</span><span class="lnk">看讨论</span></div>
+    </div>
+    <div>
+     <div class="ph3">已经跑出来的数字</div>
+     <div class="metrics">
+      <div class="metric"><div class="k">greedy</div><div class="v">83.0%</div><div class="k">200 题</div></div>
+      <div class="metric"><div class="k">maj@8（进行中）</div><div class="v" style="color:var(--blue)">81.5%</div><svg class="spark" viewBox="0 0 100 28"><polyline fill="none" stroke="#2f6fd0" stroke-width="2" points="0,20 15,14 30,17 45,12 60,13 75,11 90,12 100,12"/></svg></div>
+      <div class="metric"><div class="k">pilot 抽取率</div><div class="v">96%</div><div class="k">H1</div></div>
+      <div class="metric"><div class="k">已花费</div><div class="v">31 万</div><div class="k">token · 实验 52 分</div></div>
+     </div>
+    </div>
+   </div></div>
+  </div>
+  <div class="panel">
+   <div class="ptabs"><span class="on">研究群</span><span>文件</span><span>变更</span><div class="sp"></div><span>⤢</span></div>
+   <div class="pbody">
+    <div class="handoff"><div class="av sm a4">导</div><b>导师</b> → <b>执行者</b> 14:20</div>
+    <div style="font-size:13px;margin-top:-8px">H1 通过了，开始 H2：200 题 × 8 采样，温度 0.7。<span class="cond">止损：单题 &gt; 15 秒就停下来问</span></div>
+    <div class="handoff"><div class="av sm a3">执</div><b>执行者</b> 14:46</div>
+    <div class="card" style="margin-top:-8px"><div style="display:flex;gap:6px;align-items:center;font-size:12.5px"><b>H2 实验</b><span class="chip run">● 120/200</span><div class="sp"></div><span class="k">剩 18 分</span></div><div class="prog"><i style="width:60%"></i></div><div class="k">maj@8 当前 81.5% · 日志</div></div>
+    <div class="handoff"><div class="av sm a5">审</div><b>评审</b> → <b>导师</b> 14:41</div>
+    <div style="font-size:13px;margin-top:-8px">H3 只用 1 个种子算 AUC 不够稳，建议 3 个。</div>
+    <div style="margin-top:auto"><span class="btn" style="width:100%;justify-content:center">打开研究群</span></div>
+   </div>
+  </div>
+ </div>
+</div>
+</section>
+
+<!-- 2 研究群 -->
+<section class="screen" data-name="2 研究群：过程看得见" data-note="研究开始时自动建一个研究群（是你开研究时才有，不是预设）。同事之间的每一次交接都是一条你看得懂的普通消息：谁交给谁、做什么、止损条件是什么。实验是一张会自己更新的卡片（进度、实时指标、剩余时间、日志、停止 / 改参数）。评审的质疑、导师的拍板都在这里。你随时可以插话，@ 谁就是对谁说。右侧是缩小的进度板，跟着群里的事实时变化。">
+<div class="frame">
+ <div class="rail"></div>
+ <div class="side">
+  <div class="top" data-name="UX体验-小模型自我验证"></div>
+  <div class="nav"><span>⚑</span>待你决定<span class="pill">1</span></div>
+  <div class="nav"><span>▦</span>看板</div>
+  <div class="sh">研究</div>
+  <div class="row"><div class="hash" style="color:var(--clay)">◈</div><div class="t"><div class="n">GSM8K 采样策略<time>14:46</time></div><div class="p w">H2 进行中 · 120/200 题</div></div></div>
+  <div class="sh">群聊</div>
+  <div class="row"><div class="hash">#</div><div class="t"><div class="n">全员<time>14:02</time></div><div class="p">导师：开了研究「GSM8K 采样策略」</div></div></div>
+  <div class="row on"><div class="hash" style="color:var(--clay)">◈</div><div class="t"><div class="n">GSM8K 采样策略<time>14:46</time></div><div class="p w">执行者：H2 跑到 120/200</div></div></div>
+  <div class="sh">私聊</div>
+  <div class="row"><div class="av a4">导<span class="s idle"></span></div><div class="t"><div class="n">导师<time>14:40</time></div><div class="p">好，我让评审再看一下 H3</div></div></div>
+ </div>
+ <div class="cards">
+  <div class="main">
+   <div class="head"><span style="color:var(--clay)">◈</span><h1>GSM8K 采样策略</h1><span class="m">导师 · 执行者 · 评审 · 你</span><div class="sp"></div><span class="btn">进度板</span><div class="ib">⌕</div><div class="ib">⋯</div></div>
+   <div class="flow" style="overflow:auto"><div class="col">
+    <div class="msg"><div class="av a4">导</div><div class="b"><div class="who">导师<span>14:20</span></div>
+     <div class="handoff">交给 <b>@执行者</b> · H2</div>
+     <div class="txt">H1 通过了：管线可用，抽取率 96%，单题 4.2 秒。开始 H2：200 题 × 8 采样，温度 0.7、top_p 0.8，同时记下 greedy 作参照。</div>
+     <span class="cond">止损：单题超过 15 秒，或抽取率掉到 90% 以下，先停下来问我</span></div></div>
+    <div class="msg"><div class="av a3">执</div><div class="b"><div class="who">执行者<span>14:21</span></div>
+     <div class="card"><div style="display:flex;gap:8px;align-items:center"><b style="font-weight:600">H2 · maj@8 基线</b><span class="chip run">● 进行中 120/200</span><div class="sp"></div><span class="k">已跑 34 分 · 剩约 18 分</span></div>
+      <div class="prog"><i style="width:60%"></i></div>
+      <div style="display:flex;gap:16px;align-items:center;margin-top:6px"><div><div class="k">maj@8 当前</div><div style="font-size:18px;font-weight:600;color:var(--blue)">81.5%</div></div><svg viewBox="0 0 200 40" style="flex:1;height:40px"><polyline fill="none" stroke="#2f6fd0" stroke-width="2" points="0,30 20,22 40,25 60,18 80,20 100,16 120,17 140,15 160,16"/><line x1="0" x2="200" y1="14" y2="14" stroke="#9a958f" stroke-dasharray="4 4"/><text x="170" y="11" font-size="9" fill="#6f6b66">官方 80.3</text></svg></div>
+      <div style="display:flex;gap:6px;margin-top:10px"><span class="btn">日志</span><span class="btn">改参数重跑</span><span class="btn">停止</span></div></div></div></div>
+    <div class="msg"><div class="av a5">审</div><div class="b"><div class="who">评审<span>14:41</span></div>
+     <div class="handoff">对 <b>@导师</b> · H3</div>
+     <div class="txt">H3 的 AUC 现在只算了 1 个种子。小模型打分的方差很大，1 个种子的 AUC 不能拿来做止损判断。建议至少 3 个。</div></div></div>
+    <div class="msg"><div class="av a4">导</div><div class="b"><div class="who">导师<span>14:44</span></div>
+     <div class="handoff">问 <b>@你</b> · H3</div>
+     <div class="decide"><h4>补到 3 个种子吗？</h4><div style="font-size:13.5px;color:var(--fg1)">评审说得对。补跑预计多 1 小时、约 20 万 token；不补的话 H3 的结论只能写「单种子，仅供参考」。</div><div class="opt"><span class="btn pri">补跑 3 个种子</span><span class="btn">先用 1 个种子</span></div></div></div></div>
+   </div></div>
+   <div class="comp"><div class="ph">在研究群里说话；@ 谁就是对谁说</div><div class="bar"><span class="cc">＋</span><span class="cc">@ 成员</span><span class="send">↑</span></div></div>
+  </div>
+  <div class="panel">
+   <div class="ptabs"><span class="on">进度</span><span>文件</span><span>变更</span></div>
+   <div class="pbody">
+    <div class="stage"><div class="s d"><b>✓</b>定题</div><div class="l d"></div><div class="s d"><b>✓</b>计划</div><div class="l d"></div><div class="s n"><b>3</b>实验</div><div class="l"></div><div class="s"><b>4</b></div></div>
+    <div class="map">
+     <div class="node"><span class="id mono">H1</span>管线就绪<span class="tag ok">完成</span></div>
+     <div class="node" style="background:var(--sel)"><span class="id mono">H2</span>maj@8 基线<span class="tag run">120/200</span></div>
+     <div class="node"><span class="id mono">H3</span>自我验证 AUC<span class="tag" style="background:var(--amberbg);color:var(--amber)">等你</span></div>
+     <div class="node"><span class="id mono">H4</span>配对比较<span class="tag idle">排队</span></div>
+     <div class="node"><span class="id mono">H5</span>上界<span class="tag idle">排队</span></div>
+    </div>
+    <div><div class="ph3">在这个研究里</div>
+     <div class="desk"><div class="av a3">执<span class="s work"></span></div><div class="t"><div class="nm">执行者</div><div class="st">跑 H2 · 剩 18 分</div></div></div>
+     <div class="desk"><div class="av a4">导<span class="s wait"></span></div><div class="t"><div class="nm">导师</div><div class="st">等你回 H3 种子数</div></div></div>
+     <div class="desk"><div class="av a5">审<span class="s idle"></span></div><div class="t"><div class="nm">评审</div><div class="st">上一件：核对 H3 打分</div></div></div></div>
+   </div>
+  </div>
+ </div>
+</div>
+</section>
+
+<!-- 3 证据 -->
+<section class="screen" data-name="3 状态变化必带证据" data-note="假设的状态变化（进行中 → 已否定 / 已支持）一定附上证据：哪次实验、哪个数字、对照什么止损条件、图和原始结果。进度板上那一条会亮一下，点「看讨论」就落到这条消息。你不用翻文件夹，也不用相信一句「已完成」。">
+<div class="frame">
+ <div class="rail"></div>
+ <div class="side">
+  <div class="top" data-name="UX体验-小模型自我验证"></div>
+  <div class="nav"><span>⚑</span>待你决定</div><div class="nav"><span>▦</span>看板</div>
+  <div class="sh">研究</div>
+  <div class="row"><div class="hash" style="color:var(--clay)">◈</div><div class="t"><div class="n">GSM8K 采样策略<time>16:10</time></div><div class="p" style="color:var(--red)">H3 已否定</div></div></div>
+  <div class="sh">群聊</div>
+  <div class="row on"><div class="hash" style="color:var(--clay)">◈</div><div class="t"><div class="n">GSM8K 采样策略<time>16:10</time></div><div class="p">导师：H3 否定，转向 H5</div></div></div>
+ </div>
+ <div class="cards"><div class="main">
+  <div class="head"><span style="color:var(--clay)">◈</span><h1>GSM8K 采样策略</h1><div class="sp"></div><span class="btn">进度板</span></div>
+  <div class="flow" style="overflow:auto"><div class="col">
+   <div class="msg"><div class="av a4">导</div><div class="b"><div class="who">导师<span>16:10</span></div>
+    <div class="card">
+     <div style="display:flex;gap:8px;align-items:center"><span class="mono" style="color:var(--fg2)">H3</span><b>自我验证打分的 AUC</b><span class="chip">进行中</span>→<span class="chip err">已否定</span></div>
+     <div class="why no"><b>依据：</b>3 个种子的 AUC 是 0.52 / 0.54 / 0.51，平均 0.523，低于计划里写好的止损线 0.55。也就是说，1.5B 模型给自己的解打分，和瞎猜差不多。</div>
+     <table class="tbl"><tr><th>种子</th><th>AUC</th><th>正确解平均分</th><th>错误解平均分</th></tr><tr><td>0</td><td>0.52</td><td>0.71</td><td>0.69</td></tr><tr><td>1</td><td>0.54</td><td>0.72</td><td>0.68</td></tr><tr><td>2</td><td>0.51</td><td>0.70</td><td>0.70</td></tr></table>
+     <div class="fig"><svg viewBox="0 0 400 90" style="width:100%;height:100%"><path d="M20 70 Q 100 40 200 46 T 380 20" fill="none" stroke="#b3392f" stroke-width="2"/><line x1="20" y1="80" x2="380" y2="10" stroke="#9a958f" stroke-dasharray="4 4"/><text x="300" y="70" font-size="10" fill="#6f6b66">ROC · 对角线 = 随机</text></svg></div>
+     <div style="display:flex;gap:6px;margin-top:10px"><span class="btn">实验日志</span><span class="btn">原始打分 scores.csv</span><span class="btn">讲给我听</span></div>
+     <div class="handoff" style="margin-top:10px">下一步：跳过 H4（它依赖 H3 的信号），转去 H5 看 oracle 上界，交给 <b>@执行者</b></div>
+    </div></div></div>
+  </div></div>
+ </div></div>
+</div>
+</section>
+
+<!-- 4 讲给我听 -->
+<section class="screen" data-name="4 讲给我听" data-note="看不懂的地方——一个命令、一个统计检验、一个指标——点「讲给我听」，由导师用两三句话解释这一步在做什么、为什么这么做、结果意味着什么。解释是临时浮层，不进群聊，不打扰同事。">
+<div class="frame">
+ <div class="rail"></div>
+ <div class="side"><div class="top" data-name="UX体验-小模型自我验证"></div><div class="sh">研究</div><div class="row on"><div class="hash" style="color:var(--clay)">◈</div><div class="t"><div class="n">GSM8K 采样策略</div><div class="p">H4 配对比较</div></div></div></div>
+ <div class="cards"><div class="main" style="position:relative">
+  <div class="head"><span style="color:var(--clay)">◈</span><h1>GSM8K 采样策略</h1></div>
+  <div class="flow"><div class="col">
+   <div class="msg"><div class="av a3">执</div><div class="b"><div class="who">执行者<span>17:05</span></div>
+    <div class="txt">H4 配对结果：maj@8 对、自我验证错的有 23 题；反过来 11 题。McNemar χ² = 4.24，p = 0.039。</div>
+    <div style="display:flex;gap:6px;margin-top:8px"><span class="btn">日志</span><span class="btn" style="box-shadow:inset 0 0 0 1px var(--blue);color:var(--blue)">讲给我听</span></div></div></div>
+  </div></div>
+  <div class="pop" style="left:330px;top:250px">
+   <h5><div class="av sm a4">导</div>导师的解释</h5>
+   <div><b>在做什么：</b>两种方法答的是同一批题，所以只看「一个对、另一个错」的题。23 比 11，maj@8 赢得更多。</div>
+   <div style="margin-top:6px"><b>为什么用 McNemar：</b>它专门检验「同一批样本上两个方法的差别」是不是碰巧出现的。</div>
+   <div style="margin-top:6px"><b>意味着：</b>p = 0.039 &lt; 0.05，在这 200 题上 maj@8 确实比自我验证好，而且不太像是运气。</div>
+   <div style="display:flex;gap:6px;margin-top:10px"><span class="btn">再问一句</span><span class="btn">记到笔记</span></div>
+  </div>
+ </div></div>
+</div>
+</section>
+
+<!-- 5 旁听 -->
+<section class="screen" data-name="5 旁听同事私聊" data-note="同事之间也会私下沟通（执行者问评审「这个抽取规则对不对」）。这些不发到研究群，免得刷屏，但会记录下来。你打开「旁听」就能只读看到：顶部明确写着只读、他们看不到你。想插话就点「在研究群里说」，把这段引用过去。">
+<div class="frame">
+ <div class="rail"></div>
+ <div class="side"><div class="top" data-name="UX体验-小模型自我验证"></div><div class="sh">研究</div><div class="row on"><div class="hash" style="color:var(--clay)">◈</div><div class="t"><div class="n">GSM8K 采样策略</div><div class="p">旁听中</div></div></div>
+  <div class="sh">旁听 · 这个研究里</div>
+  <div class="row on"><div class="av sm a3">执</div><div class="av sm a5" style="margin-left:-12px">审</div><div class="t"><div class="n">执行者 ↔ 评审<time>15:12</time></div><div class="p">抽取规则的边界情况</div></div></div>
+  <div class="row"><div class="av sm a4">导</div><div class="av sm a3" style="margin-left:-12px">执</div><div class="t"><div class="n">导师 ↔ 执行者<time>14:18</time></div><div class="p">H2 的温度设置</div></div></div>
+ </div>
+ <div class="cards"><div class="main">
+  <div class="head"><div class="av sm a3">执</div><div class="av sm a5" style="margin-left:-14px">审</div><h1>执行者 ↔ 评审</h1><div class="sp"></div><span class="btn">在研究群里说</span></div>
+  <div class="banner">👁 旁听 · 只读 · 他们看不到你</div>
+  <div class="flow"><div class="col">
+   <div class="msg"><div class="av a3">执</div><div class="b"><div class="who">执行者<span>15:10</span></div><div class="txt">有 7 题模型写的是「答案是 42 美元」，没有 \boxed{}。我现在的抽取规则会把它们算成错。你看要不要放宽到「最后一个数字」？</div></div></div>
+   <div class="msg"><div class="av a5">审</div><div class="b"><div class="who">评审<span>15:12</span></div><div class="txt">可以放宽，但两种方法要用同一条规则，并且在结果里注明。否则 maj@8 会因为投票天然更鲁棒而占便宜。</div></div></div>
+   <div class="msg"><div class="av a3">执</div><div class="b"><div class="who">执行者<span>15:13</span></div><div class="txt">明白，统一用「\boxed{} 优先、否则取最后一个数字」，重算 H2，H3 也同步改。</div></div></div>
+  </div></div>
+  <div class="comp" style="opacity:.6"><div class="ph">旁听时不能在这里发言 · 点右上角「在研究群里说」</div></div>
+ </div></div>
+</div>
+</section>
+
+<!-- 6 叫我 -->
+<section class="screen" data-name="6 什么时候叫我" data-note="每个研究可以设「在哪些节点叫我」。其余时间同事们自己推进、在群里沟通，你想看随时进来看。叫你的时候会出现在「待你决定」和通知里。默认：每个假设有结论时、需要花费明显变多时、出结论时。">
+<div class="frame">
+ <div class="rail"></div>
+ <div class="side"><div class="top" data-name="UX体验-小模型自我验证"></div><div class="sh">研究</div><div class="row on"><div class="hash" style="color:var(--clay)">◈</div><div class="t"><div class="n">GSM8K 采样策略</div><div class="p w">H2 进行中</div></div></div></div>
+ <div class="cards"><div class="main" style="position:relative">
+  <div class="head"><span style="color:var(--clay)">◈</span><h1>GSM8K 采样策略</h1></div>
+  <div class="overlay"><div class="dlg">
+   <div style="font-size:16px;font-weight:600;margin-bottom:8px">什么时候叫我</div>
+   <div class="setrow"><span>计划要你批准</span><div class="sp"></div><div class="tgl on"></div></div>
+   <div class="setrow"><span>每个假设有结论</span><div class="sp"></div><div class="tgl on"></div></div>
+   <div class="setrow"><span>要多花的时间或 token 明显超出计划</span><div class="sp"></div><div class="tgl on"></div></div>
+   <div class="setrow"><span>同事之间意见不一致</span><div class="sp"></div><div class="tgl"></div></div>
+   <div class="setrow"><span>每个实验开始和结束</span><div class="sp"></div><div class="tgl"></div></div>
+   <div class="setrow"><span>出结论</span><div class="sp"></div><div class="tgl on"></div></div>
+   <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:16px"><span class="btn">取消</span><span class="btn pri">好</span></div>
+  </div></div>
+ </div></div>
+</div>
+</section>
+
+<!-- 7 回放 -->
+<section class="screen" data-name="7 回放" data-note="研究的时间线：哪天定了什么、为什么改方向、哪个实验推翻了哪个假设。每个节点能点开看当时的讨论和证据；底部拖动条可以把进度板「倒回」到那个时刻的样子。写论文的方法部分、组会汇报直接用；也能导出成一页 Markdown。">
+<div class="frame">
+ <div class="rail"></div>
+ <div class="side"><div class="top" data-name="UX体验-小模型自我验证"></div><div class="sh">研究</div><div class="row on"><div class="hash" style="color:var(--clay)">◈</div><div class="t"><div class="n">GSM8K 采样策略</div><div class="p" style="color:var(--green)">已得出结论</div></div></div></div>
+ <div class="cards"><div class="main">
+  <div class="head"><span style="color:var(--clay)">◈</span><h1>回放 · GSM8K 采样策略</h1><div class="sp"></div><span class="btn">导出 Markdown</span></div>
+  <div class="flow" style="overflow:auto"><div class="col"><div class="tl">
+   <div class="ev2 k"><div class="d">10-25 22:41 · 定题</div><div class="h">你提出问题；导师查了 4 篇工作</div><div class="p">关键判断：先测 1.5B 模型对自己答案有没有判别力，否则后面的比较没有意义。<span class="lnk">看讨论</span></div></div>
+   <div class="ev2 o"><div class="d">10-25 22:45 · 计划批准</div><div class="h">5 个假设，H3 设止损线 AUC 0.55</div><div class="p">你选了「本机、不设上限」。<span class="lnk">看计划</span></div></div>
+   <div class="ev2 o"><div class="d">10-26 13:50 · H1 完成</div><div class="h">管线可用，抽取率 96%</div><div class="p"><span class="lnk">看证据</span></div></div>
+   <div class="ev2 k"><div class="d">10-26 15:13 · 方法调整</div><div class="h">统一答案抽取规则，H2 重算</div><div class="p">来自执行者和评审的私下讨论（旁听可见）。<span class="lnk">看讨论</span></div></div>
+   <div class="ev2 x"><div class="d">10-26 16:10 · H3 否定</div><div class="h">自我验证 AUC 0.523 &lt; 0.55</div><div class="p">转向 H5，跳过 H4。<span class="lnk">看证据</span></div></div>
+   <div class="ev2 o"><div class="d">10-26 17:30 · 结论</div><div class="h">在 1.5B + GSM8K 上，自我验证 best-of-8 不如 maj@8（p = 0.039）</div><div class="p">提炼者已把 2 条经验写进研究手册。<span class="lnk">看结论</span></div></div>
+  </div></div></div>
+  <div class="scrub"><span>10-25 22:41</span><div class="tr"><i></i><b></b></div><span>10-26 17:30</span><span class="btn" style="height:24px">倒回进度板到这一刻</span></div>
+ </div></div>
+</div>
+</section>
+
+<!-- 8 你不在时 -->
+<section class="screen" data-name="8 你不在时" data-note="离开一阵再回来，研究群顶部先给一张「你不在时」：做完了什么、哪个假设变了、花了多少、几件等你。按事件生成，不花模型钱。点任何一条跳到对应的消息。">
+<div class="frame">
+ <div class="rail"></div>
+ <div class="side"><div class="top" data-name="UX体验-小模型自我验证"></div><div class="sh">研究</div><div class="row on"><div class="hash" style="color:var(--clay)">◈</div><div class="t"><div class="n">GSM8K 采样策略<time>08:12</time></div><div class="p" style="color:var(--amber)">1 件等你</div></div></div></div>
+ <div class="cards"><div class="main">
+  <div class="head"><span style="color:var(--clay)">◈</span><h1>GSM8K 采样策略</h1></div>
+  <div class="flow"><div class="col">
+   <div class="brief"><h4>你不在时（昨晚 23:10 → 今早 08:12）</h4><ul style="margin:0;padding-left:18px">
+    <li>执行者 跑完 H2：maj@8 = 81.0%，greedy = 83.0%（和官方「maj@8 不如 greedy」一致）</li>
+    <li>评审 指出抽取规则不一致，H2 已按统一规则重算</li>
+    <li><span style="color:var(--red)">H3 否定</span>：AUC 0.523 低于止损线</li>
+    <li>花了 18 万 token、实验 2 小时 10 分</li>
+    <li><b style="color:var(--amber);font-weight:500">1 件等你</b>：要不要加一个 7B 模型作对照</li></ul></div>
+   <div class="msg"><div class="av a4">导</div><div class="b"><div class="who">导师<span>08:12</span></div><div class="decide"><h4>加一个 7B 对照吗？</h4><div style="font-size:13.5px;color:var(--fg1)">1.5B 上自我验证无效已经比较确定。加 Qwen2.5-Math-7B 能回答「是不是规模问题」，但本机要跑约 6 小时。</div><div class="opt"><span class="btn pri">加</span><span class="btn">不加，直接出结论</span></div></div></div></div>
+  </div></div>
+ </div></div>
+</div>
+</section>
+
+<!-- 9 全员群里的研究卡 -->
+<section class="screen" data-name="9 全员群里的研究卡" data-note="项目的「全员」群只放项目级的事。研究开始和结束时各留一张卡：标题、状态、等你几件，点开进研究。这样在群里也知道项目里有哪些研究在跑，又不会被研究细节刷屏。">
+<div class="frame">
+ <div class="rail"></div>
+ <div class="side"><div class="top" data-name="UX体验-小模型自我验证"></div><div class="nav"><span>⚑</span>待你决定<span class="pill">1</span></div><div class="nav"><span>▦</span>看板</div>
+  <div class="sh">研究</div><div class="row"><div class="hash" style="color:var(--clay)">◈</div><div class="t"><div class="n">GSM8K 采样策略</div><div class="p w">H2 进行中</div></div></div>
+  <div class="sh">群聊</div><div class="row on"><div class="hash">#</div><div class="t"><div class="n">全员<time>14:02</time></div><div class="p">导师：开了研究…</div></div></div></div>
+ <div class="cards"><div class="main">
+  <div class="head"><div class="hash" style="width:24px;height:24px">#</div><h1>全员</h1><span class="m">你 · 导师 · 执行者 · 评审</span></div>
+  <div class="flow"><div class="col">
+   <div class="mine">/研究 在 GSM8K 的 200 题子集上，比较 Qwen2.5-Math-1.5B 的 maj@8 和自我验证 best-of-8</div>
+   <div class="msg"><div class="av a4">导</div><div class="b"><div class="who">导师<span>14:02</span></div>
+    <div class="rcard"><div class="ic">◈</div><div style="flex:1"><div style="font-weight:600">GSM8K 采样策略</div><div class="k" style="margin-top:2px">实验中 · H2 120/200 · 导师、执行者、评审</div><div class="prog" style="margin:6px 0 0"><i style="width:45%"></i></div></div><span class="chip wait">1 件等你</span><span class="btn">打开</span></div></div></div>
+   <div class="msg"><div class="av a2">文</div><div class="b"><div class="who">文献员<span>14:30</span></div><div class="txt">另外，项目资料里新加了 Weng 2023 自我验证那篇，研究群里也同步了。</div></div></div>
+  </div></div>
+  <div class="comp"><div class="ph">在全员群里说话；打 / 开研究或其他工作流</div><div class="bar"><span class="cc">＋</span><span class="cc">@ 成员</span><span class="send">↑</span></div></div>
+ </div></div>
+</div>
+</section>
+
+<!-- 10 私聊里开研究 -->
+<section class="screen" data-name="10 私聊里开研究" data-note="在个人空间和导师聊出方向后，导师的建议下面有「在项目里开始」。点了选一个项目（或新建），研究群和进度板一起建好，这段私聊作为背景带过去，不用再说一遍。">
+<div class="frame">
+ <div class="rail" data-personal="1"></div>
+ <div class="side"><div class="top" data-name="个人空间"></div><div class="sh">私聊</div><div class="row on"><div class="av a4">导<span class="s idle"></span></div><div class="t"><div class="n">导师<time>22:26</time></div><div class="p">查了一圈已有工作，先给结论…</div></div></div><div class="row"><div class="av a3">执<span class="s idle"></span></div><div class="t"><div class="n">执行者</div></div></div></div>
+ <div class="cards"><div class="main" style="position:relative">
+  <div class="head"><div class="av sm a4">导</div><h1>导师</h1><span class="m">空闲</span></div>
+  <div class="flow"><div class="col">
+   <div class="mine">我想研究小模型（1B 左右）在数学题上能不能通过自我验证提高正确率，你觉得从哪开始？</div>
+   <div class="msg"><div class="av a4">导</div><div class="b"><div class="who">导师<span>22:26</span></div><div class="txt">先别问「能不能提高正确率」，先回答「1B 模型对自己的答案有没有判别力」。第一步：Qwen2.5-Math-1.5B，GSM8K 500 题，每题 8 条，算 greedy / maj@8 / self-verifier best-of-8 / oracle 四个数，再加自我打分的 AUC……</div>
+    <div class="rcard" style="margin-top:10px"><div class="ic">◈</div><div style="flex:1"><div style="font-weight:600">小模型自我验证的判别力</div><div class="k">这段对话会作为背景带进研究</div></div><span class="btn pri">在项目里开始</span></div></div></div>
+  </div></div>
+  <div class="overlay"><div class="dlg">
+   <div style="font-size:16px;font-weight:600;margin-bottom:10px">在哪个项目里开始？</div>
+   <div class="fld" style="margin-bottom:8px">UX体验-小模型自我验证</div>
+   <div class="fld" style="color:var(--fg2)">＋ 新建项目</div>
+   <div class="lbl">研究名</div><div class="fld">小模型自我验证的判别力</div>
+   <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:16px"><span class="btn">取消</span><span class="btn pri">开始</span></div>
+  </div></div>
+ </div></div>
+</div>
+</section>
+<script>
+// The rail as in the app now: All, personal space, projects (neutral tiles), add; then sections.
+document.querySelectorAll('.screen').forEach(sc=>{
+ const r=sc.querySelector('.rail'); const personal=r.dataset.personal;
+ r.innerHTML=`<div class="pt" title="全部项目">▦</div><div class="pt ${personal?'on':''}" title="个人空间">◯</div><div class="rsep"></div>`+
+  `<div class="pt ${personal?'':'on'}" title="UX体验-小模型自我验证">UX<span class="bd">1</span></div><div class="pt" title="手写数字识别">手</div><div class="pt" style="font-size:18px">＋</div>`+
+  `<div class="ri" title="同事">👥</div><div class="ri" title="资料">📚</div><div class="ri" title="定时">⏱</div><div class="ri" title="自定义">⚙︎</div><div style="flex:1"></div>`;
+ const top=sc.querySelector('.top'); if(top) top.outerHTML=`<div class="top"><div class="proj">${top.dataset.name}</div><div class="sp"></div><div class="ib">⌕</div><div class="ib">⋯</div></div>`;
+});
+const screens=[...document.querySelectorAll('.screen')];
+const tabs=document.getElementById('tabs'), note=document.getElementById('note');
+function show(i){screens.forEach((s,j)=>s.classList.toggle('on',i===j));[...tabs.children].forEach((b,j)=>b.classList.toggle('on',i===j));note.textContent=screens[i].dataset.note;location.hash=i+1;}
+screens.forEach((s,i)=>{const b=document.createElement('button');b.textContent=s.dataset.name;b.onclick=()=>show(i);tabs.appendChild(b);});
+// "看讨论" on the board goes to the research group; "进度板" back.
+document.addEventListener('click',e=>{const t=e.target.closest('.lnk,.btn');if(!t)return;const x=t.textContent.trim();
+ if(x==='看讨论'||x==='打开研究群')show(1);else if(x==='进度板'||x==='打开')show(0);else if(x==='讲给我听')show(3);else if(x.includes('叫我'))show(5);else if(x.includes('回放'))show(6);else if(x==='看证据')show(2);});
+show(Math.max(0,(parseInt(location.hash.slice(1))||1)-1));
+</script>
+</body>
+</html>

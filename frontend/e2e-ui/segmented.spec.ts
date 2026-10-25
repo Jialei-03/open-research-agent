@@ -372,7 +372,7 @@ test("sizes: items are 28 and 24 high in a 3px frame", async ({ page }) => {
 });
 
 for (const mode of ["light", "dark"] as const) {
-  test(`${mode}: text meets WCAG AA and the thumb is a raised surface`, async ({
+  test(`${mode}: text meets WCAG AA and the thumb is the selected fill`, async ({
     page,
   }) => {
     await page.emulateMedia({ reducedMotion: "reduce" });
@@ -416,7 +416,7 @@ for (const mode of ["light", "dark"] as const) {
         await contrastOfTokens(page, "--ui-fg-2", "--ui-fill", base),
       ).toBeGreaterThanOrEqual(4.5);
     expect(
-      await contrastOfTokens(page, "--ui-fg", "--ui-elev"),
+      await contrastOfTokens(page, "--ui-fg", "--ui-selected", "--ui-bg"),
     ).toBeGreaterThanOrEqual(4.5);
 
     const thumb = await thumbOf(group).evaluate((element) => {
@@ -427,21 +427,14 @@ for (const mode of ["light", "dark"] as const) {
         radius: parseFloat(style.borderTopLeftRadius),
       };
     });
+    // Selected looks the same everywhere: the grey fill, no lift.
     expect(thumb.background).toBe(
-      await computed("backgroundColor", "var(--ui-elev)"),
+      await computed("backgroundColor", "var(--ui-selected)"),
     );
-    const shadow = await page.evaluate(() => {
-      const probe = document.createElement("div");
-      probe.style.boxShadow = "var(--ui-elev-1)";
-      document.body.append(probe);
-      const result = getComputedStyle(probe).boxShadow;
-      probe.remove();
-      return result;
-    });
-    expect(thumb.shadow).toBe(shadow);
+    expect(thumb.shadow).toBe("none");
     expect(thumb.radius).toBeGreaterThan(100);
 
-    // The pill is the soft fill, fully round.
+    // The track is clear, fully round.
     const pill = await group.evaluate((element) => {
       const style = getComputedStyle(element);
       return [
@@ -449,7 +442,7 @@ for (const mode of ["light", "dark"] as const) {
         parseFloat(style.borderTopLeftRadius),
       ] as const;
     });
-    expect(pill[0]).toBe(await computed("backgroundColor", "var(--ui-fill)"));
+    expect(pill[0]).toBe("rgba(0, 0, 0, 0)");
     expect(pill[1]).toBeGreaterThan(100);
   });
 }

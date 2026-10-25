@@ -1,0 +1,551 @@
+/* A research at a glance; the same surfaces and status colours as the rest of the app. */
+.board {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ui-space-24);
+  width: min(100%, var(--ui-conversation-width));
+  margin: 0 auto;
+  padding: var(--ui-space-20) 0 var(--ui-space-32);
+}
+
+.board h3 {
+  margin: 0 0 var(--ui-space-8);
+  color: var(--ui-fg-3);
+  font-size: var(--ui-text-12);
+  font-weight: var(--ui-weight-regular);
+}
+
+.now {
+  display: flex;
+  gap: var(--ui-space-10);
+  align-items: flex-start;
+  padding: var(--ui-space-12) var(--ui-space-16);
+  border-radius: var(--ui-r-12);
+  background: var(--ui-fill);
+  font-size: var(--ui-text-15);
+  line-height: var(--ui-leading);
+}
+
+.now[data-live] {
+  background: color-mix(in oklab, var(--ui-info-text) 12%, transparent);
+}
+
+.dot {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  margin-top: 8px;
+  border-radius: 50%;
+  background: var(--ui-fg-3);
+}
+
+.now[data-live] .dot {
+  background: var(--ui-info-text);
+  box-shadow: 0 0 0 4px
+    color-mix(in oklab, var(--ui-info-text) 18%, transparent);
+}
+
+.stages {
+  display: flex;
+  align-items: center;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.stages li {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: var(--ui-space-6);
+  color: var(--ui-fg-3);
+  font-size: var(--ui-text-13);
+  white-space: nowrap;
+}
+
+.stages li:last-child {
+  flex: none;
+}
+
+.stages li:not(:last-child)::after {
+  content: "";
+  flex: 1;
+  height: 2px;
+  margin: 0 var(--ui-space-10);
+  background: var(--ui-edge-strong);
+}
+
+.stages li[data-state="done"]::after {
+  background: var(--ui-success-text);
+}
+
+.stages b {
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--ui-fill);
+  color: var(--ui-fg-2);
+  font-size: var(--ui-text-11);
+}
+
+.stages li[data-state="done"] b {
+  background: color-mix(in oklab, var(--ui-success-text) 16%, transparent);
+  color: var(--ui-success-text);
+}
+
+.stages li[data-state="now"] {
+  color: var(--ui-fg);
+  font-weight: var(--ui-weight-strong);
+}
+
+.stages li[data-state="now"] b {
+  background: var(--ui-info-text);
+  color: var(--ui-bg);
+}
+
+.decide {
+  padding: var(--ui-space-12) var(--ui-space-16);
+  border-radius: var(--ui-r-12);
+  background: color-mix(in oklab, var(--ui-warning-text) 12%, transparent);
+}
+
+.decide h3 {
+  color: var(--ui-warning-text);
+}
+
+.decision {
+  display: flex;
+  gap: var(--ui-space-12);
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--ui-space-4) 0;
+  font-size: var(--ui-text-14);
+}
+
+.hypotheses {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.hypotheses li {
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr) auto 64px;
+  gap: var(--ui-space-12);
+  align-items: center;
+  padding: var(--ui-space-10) var(--ui-space-8);
+  border-radius: var(--ui-r-10);
+}
+
+.hypotheses li:hover {
+  background: var(--ui-hover);
+}
+
+.hypotheses li[data-status="active"] {
+  background: color-mix(in oklab, var(--ui-info-text) 8%, transparent);
+}
+
+.id {
+  color: var(--ui-fg-3);
+  font-family: var(--ui-font-mono);
+  font-size: var(--ui-text-12);
+}
+
+.what {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  font-size: var(--ui-text-14);
+}
+
+.what small {
+  overflow: hidden;
+  color: var(--ui-fg-2);
+  font-size: var(--ui-text-12);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chip {
+  height: 22px;
+  padding: 0 var(--ui-space-8);
+  border-radius: var(--ui-r-pill);
+  background: var(--ui-fill);
+  color: var(--ui-fg-2);
+  font-size: var(--ui-text-12);
+  line-height: 22px;
+  white-space: nowrap;
+}
+
+.chip[data-status="active"] {
+  background: color-mix(in oklab, var(--ui-info-text) 14%, transparent);
+  color: var(--ui-info-text);
+}
+
+.chip[data-status="supported"] {
+  background: color-mix(in oklab, var(--ui-success-text) 14%, transparent);
+  color: var(--ui-success-text);
+}
+
+.chip[data-status="refuted"] {
+  background: color-mix(in oklab, var(--ui-danger-text) 12%, transparent);
+  color: var(--ui-danger-text);
+}
+
+.link {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--ui-info-text);
+  font: inherit;
+  font-size: var(--ui-text-12);
+  text-align: right;
+  cursor: pointer;
+}
+
+.numbers {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--ui-space-10);
+}
+
+.number {
+  display: grid;
+  gap: 2px;
+  padding: var(--ui-space-10) var(--ui-space-12);
+  border: 0;
+  border-radius: var(--ui-r-10);
+  background: var(--ui-fill);
+  color: var(--ui-fg);
+  font: inherit;
+  text-align: left;
+}
+
+button.number {
+  cursor: pointer;
+}
+
+button.number:hover {
+  background: var(--ui-hover);
+}
+
+.number span {
+  overflow: hidden;
+  color: var(--ui-fg-2);
+  font-size: var(--ui-text-12);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.number strong {
+  font-size: 20px;
+  font-weight: var(--ui-weight-strong);
+  font-variant-numeric: tabular-nums;
+}
+
+.number[data-live] strong {
+  color: var(--ui-info-text);
+}
+
+.number small {
+  color: var(--ui-fg-3);
+  font-size: var(--ui-text-12);
+}
+
+.live {
+  display: grid;
+  gap: var(--ui-space-8);
+}
+
+.job {
+  display: grid;
+  gap: var(--ui-space-8);
+  padding: var(--ui-space-12) var(--ui-space-16);
+  border: 1px solid var(--ui-edge-subtle);
+  border-radius: var(--ui-r-12);
+}
+
+.jobHead {
+  display: flex;
+  gap: var(--ui-space-8);
+  align-items: baseline;
+  min-width: 0;
+}
+
+.jobHead b {
+  overflow: hidden;
+  flex: 1;
+  font-weight: var(--ui-weight-strong);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.jobTime {
+  flex: none;
+  color: var(--ui-fg-3);
+  font-size: var(--ui-text-12);
+  font-variant-numeric: tabular-nums;
+}
+
+.progress {
+  overflow: hidden;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--ui-fill);
+}
+
+.progress i {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--ui-info-text);
+  transition: width 0.4s ease;
+}
+
+.jobMetric {
+  display: flex;
+  gap: var(--ui-space-16);
+  align-items: center;
+}
+
+.jobMetric > div {
+  display: grid;
+  flex: none;
+}
+
+.jobMetric span {
+  color: var(--ui-fg-3);
+  font-size: var(--ui-text-12);
+}
+
+.jobMetric strong {
+  color: var(--ui-info-text);
+  font-size: var(--ui-text-18);
+  font-weight: var(--ui-weight-strong);
+  font-variant-numeric: tabular-nums;
+}
+
+.spark {
+  flex: 1;
+  height: 32px;
+  min-width: 0;
+}
+
+.spark polyline {
+  fill: none;
+  stroke: var(--ui-info-text);
+  stroke-width: 1.5;
+  vector-effect: non-scaling-stroke;
+}
+
+.jobActions {
+  display: flex;
+  gap: var(--ui-space-6);
+}
+
+.callMe {
+  display: grid;
+  gap: var(--ui-space-10);
+}
+
+.callMe label {
+  display: flex;
+  gap: var(--ui-space-8);
+  align-items: center;
+  font-size: var(--ui-text-14);
+}
+
+.away {
+  box-sizing: border-box;
+  width: min(100%, var(--ui-conversation-width));
+  margin: var(--ui-space-20) auto 0;
+  padding: var(--ui-space-12) var(--ui-space-16);
+  border: 1px solid var(--ui-edge-subtle);
+  border-radius: var(--ui-r-12);
+}
+
+.away header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.away h3 {
+  margin: 0;
+}
+
+.away ul {
+  display: grid;
+  gap: var(--ui-space-6);
+  margin: var(--ui-space-6) 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--ui-text-14);
+}
+
+.away .link {
+  font-size: inherit;
+  text-align: left;
+}
+
+/* 讲给我听: a button under the selection, then the answer in its place. */
+.explain {
+  position: fixed;
+  z-index: 50;
+  transform: translateX(-50%);
+}
+
+.explain > button {
+  padding: var(--ui-space-4) var(--ui-space-10);
+  border: 1px solid var(--ui-edge-subtle);
+  border-radius: var(--ui-r-8);
+  background: var(--ui-bg);
+  box-shadow: var(--ui-elev-2);
+  color: var(--ui-fg);
+  font: inherit;
+  font-size: var(--ui-text-12);
+  cursor: pointer;
+}
+
+.explain > div {
+  box-sizing: border-box;
+  width: 340px;
+  padding: var(--ui-space-10) var(--ui-space-12) var(--ui-space-12);
+  border: 1px solid var(--ui-edge-subtle);
+  border-radius: var(--ui-r-12);
+  background: var(--ui-bg);
+  box-shadow: var(--ui-elev-2);
+}
+
+.explain header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: var(--ui-text-12);
+}
+
+.explain p {
+  margin: var(--ui-space-6) 0 0;
+  font-size: var(--ui-text-14);
+  line-height: var(--ui-leading);
+  white-space: pre-wrap;
+}
+
+.explain p[data-failed] {
+  color: var(--ui-danger-text);
+}
+
+/* 回放: a scrubber, the board as it stood, then the timeline. */
+.replay {
+  display: flex;
+  flex-direction: column;
+  width: min(100%, var(--ui-conversation-width));
+  margin: 0 auto;
+  padding-bottom: var(--ui-space-32);
+}
+
+.replay .board {
+  padding-top: var(--ui-space-12);
+}
+
+.scrub {
+  position: sticky;
+  z-index: 1;
+  top: 0;
+  display: flex;
+  gap: var(--ui-space-12);
+  align-items: center;
+  padding: var(--ui-space-12) 0;
+  background: var(--ui-bg);
+  font-size: var(--ui-text-12);
+  font-variant-numeric: tabular-nums;
+}
+
+.scrub input {
+  flex: 1;
+  accent-color: var(--ui-info-text);
+}
+
+.scrub span {
+  color: var(--ui-fg-3);
+  white-space: nowrap;
+}
+
+.timeline {
+  display: grid;
+  gap: var(--ui-space-16);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.timeline h3 {
+  margin: 0 0 var(--ui-space-6);
+  color: var(--ui-fg-3);
+  font-size: var(--ui-text-12);
+  font-weight: var(--ui-weight-regular);
+}
+
+.timeline ul {
+  display: grid;
+  gap: var(--ui-space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.timeline ul li {
+  display: flex;
+  gap: var(--ui-space-8);
+  align-items: baseline;
+  padding: var(--ui-space-6) var(--ui-space-8);
+  border-radius: var(--ui-r-8);
+}
+
+.timeline li[data-current] {
+  background: var(--ui-fill);
+}
+
+.timeline li[data-later] {
+  opacity: 0.45;
+}
+
+.step {
+  display: flex;
+  flex: 1;
+  gap: var(--ui-space-10);
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: var(--ui-text-14);
+  text-align: left;
+  cursor: pointer;
+}
+
+.step time {
+  flex: none;
+  color: var(--ui-fg-3);
+  font-size: var(--ui-text-12);
+  font-variant-numeric: tabular-nums;
+}
+
+.step b {
+  font-weight: var(--ui-weight-strong);
+}
+
+.step small {
+  display: block;
+  margin-top: var(--ui-space-2);
+  color: var(--ui-fg-3);
+  font-size: var(--ui-text-12);
+}
+
+.replayEmpty {
+  color: var(--ui-fg-3);
+}

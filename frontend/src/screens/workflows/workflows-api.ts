@@ -70,6 +70,9 @@ const BUILTIN_NAMES: Record<string, MessageKey> = {
   "paper-writing": "workflows.builtin.writing",
   "read-to-write": "workflows.builtin.readToWrite",
 };
+/** The workflows ORA ships: their rules are not the researcher's to read by id. */
+export const builtinWorkflow = (id: string | undefined) =>
+  !id || Object.hasOwn(BUILTIN_NAMES, id);
 const LITERATURE: MessageKey[] = [
   "workflows.step.collect",
   "workflows.step.read",

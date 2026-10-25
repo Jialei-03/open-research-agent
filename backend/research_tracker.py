@@ -10,6 +10,7 @@ the tracker's SDK and API key never enter an experiment's container.
 
 `tracker_url` on a job: "" not yet mirrored, "none" not mirrored by choice,
 an http(s) address, "local:<folder>" for an offline log, or "error: ...".
+An experiment that logged to SwanLab online itself keeps that run's page.
 """
 
 import json
@@ -52,7 +53,22 @@ def _payload(settings, d, job, tracker):
     }
 
 
+def _own_page(settings, job):
+    """The page of a run the experiment logged to SwanLab online itself."""
+    note = research_sandbox.rundir(settings, job.project_id, job.id) / "swanlab.json"
+    try:
+        url = str(json.loads(note.read_text()).get("url") or "")
+    except (OSError, ValueError, AttributeError):
+        return ""
+    return url[:500] if url.startswith(("http://", "https://")) else ""
+
+
 def sync_one(settings, d, job):
+    own = _own_page(settings, job)
+    if own:
+        # Already on SwanLab: a second, mirrored run would only duplicate it.
+        job.tracker_url = own
+        return
     tracker = research_settings.load(settings)["tracker"]
     if tracker["kind"] == "none":
         job.tracker_url = "none"

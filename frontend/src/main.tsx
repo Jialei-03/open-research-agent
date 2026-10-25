@@ -57,9 +57,16 @@ class StaleRelease extends React.Component<
   { children: React.ReactNode },
   { failed: boolean }
 > {
-  state = { failed: false };
-  static getDerivedStateFromError() {
-    return { failed: true };
+  state = { failed: false, stale: false };
+  static getDerivedStateFromError(error: Error) {
+    // Only a missing module means a new release; anything else is a plain failure.
+    return {
+      failed: true,
+      stale:
+        /dynamically imported module|Loading chunk|Importing a module script/i.test(
+          error?.message || "",
+        ),
+    };
   }
   componentDidCatch(error: Error) {
     if (
@@ -77,15 +84,19 @@ class StaleRelease extends React.Component<
     }
   }
   render() {
-    return this.state.failed ? <StaleNotice /> : this.props.children;
+    return this.state.failed ? (
+      <StaleNotice stale={this.state.stale} />
+    ) : (
+      this.props.children
+    );
   }
 }
 
-function StaleNotice() {
+function StaleNotice({ stale }: { stale: boolean }) {
   const { t } = useI18n();
   return (
     <div className="boot">
-      Open Research Agent <span>{t("boot.stale")}</span>
+      Open Research Agent <span>{t(stale ? "boot.stale" : "boot.failed")}</span>
     </div>
   );
 }

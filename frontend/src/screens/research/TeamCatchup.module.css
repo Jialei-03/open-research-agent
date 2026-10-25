@@ -1,0 +1,42 @@
+/* The briefing: what happened while you were away, in a few lines, from events (no model). */
+.summary {
+  max-width: var(--ui-conversation-width);
+  margin: var(--ui-space-12) auto;
+  padding: var(--ui-space-12) var(--ui-space-16);
+  border-radius: var(--ui-r-12);
+  background: var(--ui-fill);
+  font-size: var(--ui-text-13);
+  overflow-wrap: anywhere;
+}
+
+.summary header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--ui-space-8);
+}
+
+.summary strong {
+  font-weight: var(--ui-weight-strong);
+}
+
+.events {
+  display: grid;
+  gap: var(--ui-space-4);
+  margin: var(--ui-space-4) 0 var(--ui-space-8);
+  padding-left: var(--ui-space-16);
+  color: var(--ui-fg-2);
+}
+
+.events li[data-tone="waiting"] {
+  color: var(--ui-warning-text);
+}
+
+.events li[data-tone="failed"] {
+  color: var(--ui-danger-text);
+}
+
+.events .file {
+  list-style: none;
+  margin-left: calc(-1 * var(--ui-space-16));
+}

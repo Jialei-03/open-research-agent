@@ -106,6 +106,8 @@ path_separator = "os"
 [tool.pytest.ini_options]
 pythonpath = ["."]
 testpaths = ["backend/tests"]
-# Four processes: about a minute for the whole suite instead of six or seven.
+# Eight processes: about two and a half minutes instead of eleven; more gain
+# little, since many tests run git and subprocesses.
 # `-n 0` runs it in one process (what the PostgreSQL tests need: one shared database).
-addopts = "-n 4"
+addopts = "-n 8"
+markers = ["roster: a new project starts with the default colleagues only"]

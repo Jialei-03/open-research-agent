@@ -1,5 +1,8 @@
 import {
   Database,
+  LineChart,
+  Monitor,
+  Sparkles,
   Gauge,
   KeyRound,
   RefreshCw,
@@ -8,7 +11,7 @@ import {
   X,
   type LucideIcon,
 } from "lucide-react";
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { useI18n } from "../../i18n/I18nProvider";
 import type { MessageKey } from "../../i18n/i18n";
 import { IconButton } from "../../ui";
@@ -17,15 +20,22 @@ import { CloudSection } from "./CloudSection";
 import { DataSection } from "./DataSection";
 import {
   AppearanceSection,
+  ColleaguesAtOnceSection,
   KeypointsSection,
   LanguageSection,
 } from "./PreferencesSection";
 import { UsageSection } from "./UsageSection";
+import { ModelsSection } from "./ModelsSection";
+import { MachinesSection } from "../customize/MachinesSection";
+import { TrackingSection } from "../customize/TrackingSection";
 import { useLocal } from "../../app/edition";
 import styles from "./SettingsWindow.module.css";
 
 export type SettingsCategory =
   | "general"
+  | "models"
+  | "environments"
+  | "tracking"
   | "data"
   | "usage"
   | "access"
@@ -47,6 +57,14 @@ const GROUPS: { title: MessageKey; entries: Entry[] }[] = [
     ],
   },
   {
+    title: "settings.group.connections",
+    entries: [
+      { id: "models", icon: Sparkles },
+      { id: "environments", icon: Monitor },
+      { id: "tracking", icon: LineChart },
+    ],
+  },
+  {
     title: "settings.group.account",
     entries: [
       { id: "data", icon: Database },
@@ -59,6 +77,8 @@ const GROUPS: { title: MessageKey; entries: Entry[] }[] = [
     ],
   },
 ];
+
+const LISTS: SettingsCategory[] = ["models", "environments", "tracking"];
 
 export const CATEGORIES = GROUPS.flatMap((g) => g.entries.map((e) => e.id));
 
@@ -76,8 +96,15 @@ function Body({
           <AppearanceSection />
           <LanguageSection />
           <KeypointsSection />
+          <ColleaguesAtOnceSection />
         </>
       );
+    case "models":
+      return <ModelsSection />;
+    case "environments":
+      return <MachinesSection />;
+    case "tracking":
+      return <TrackingSection />;
     case "data":
       return <DataSection />;
     case "usage":
@@ -110,23 +137,29 @@ export function SettingsWindow({
   const search = useRef<HTMLInputElement>(null);
   const [query, setQuery] = useState("");
 
-  useEffect(() => {
+  // The window is up before its body mounts: a dialog the body opens on its own
+  // (adding the first model) is then above the window, not beneath it.
+  const [opened, setOpened] = useState(false);
+  useLayoutEffect(() => {
     const el = dialog.current;
     if (el && !el.open) el.showModal();
     search.current?.focus();
+    setOpened(true);
   }, []);
 
   const label = (id: SettingsCategory) =>
     t(`settings.category.${id}` as MessageKey);
   const q = query.trim().toLowerCase();
   const local = useLocal();
-  const category = local !== true && asked === "cloud" ? "general" : asked;
+  // Linking to a hosted account and research machines are the local edition's.
+  const localOnly = (id: SettingsCategory) =>
+    ["cloud", "environments", "tracking"].includes(id);
+  const category = local !== true && localOnly(asked) ? "general" : asked;
   const groups = GROUPS.map((g) => ({
     ...g,
     entries: g.entries.filter(
       (e) =>
-        // Linking to a hosted account is the local edition's.
-        (e.id !== "cloud" || local === true) &&
+        (!localOnly(e.id) || local === true) &&
         (!q ||
           label(e.id).toLowerCase().includes(q) ||
           t(`settings.keywords.${e.id}` as MessageKey)
@@ -152,7 +185,7 @@ export function SettingsWindow({
       <div className={styles.frame}>
         <nav className={styles.nav} aria-label={t("settings.title")}>
           <label className={styles.search}>
-            <Search size={15} aria-hidden />
+            <Search size={16} aria-hidden />
             <input
               ref={search}
               type="search"
@@ -195,8 +228,11 @@ export function SettingsWindow({
             <IconButton icon={X} label={t("common.close")} onClick={onClose} />
           </div>
           <div className={styles.content} key={category}>
-            <h1 className={styles.title}>{label(category)}</h1>
-            <Body category={category} go={go} />
+            {/* These lists bring their own title, search and add button. */}
+            {!LISTS.includes(category) && (
+              <h1 className={styles.title}>{label(category)}</h1>
+            )}
+            {opened && <Body category={category} go={go} />}
           </div>
         </main>
       </div>
