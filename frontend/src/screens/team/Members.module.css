@@ -313,3 +313,9 @@ fieldset.field legend {
   font-size: var(--ui-text-14);
   outline: none;
 }
+
+.oneLine {
+  margin: 0 0 var(--ui-space-16);
+  color: var(--ui-fg-1);
+  font-size: var(--ui-text-15);
+}

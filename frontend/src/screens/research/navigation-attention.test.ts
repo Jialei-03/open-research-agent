@@ -75,7 +75,7 @@ describe("needs you", () => {
     expect(items.find((item) => item.title === "confirmation")?.hash).toBe(
       teamHash("project", "channel", "confirmation"),
     );
-    expect(items[0].hash).toBe(teamHash("project", "", "research:plan"));
+    expect(items[0].hash).toBe("research/plan");
   });
 
   it("disappears when decisions are resolved or projects archived", () => {
@@ -87,5 +87,36 @@ describe("needs you", () => {
     expect(
       needsYou(data, [message("wait", { data: { waiting: true } })]),
     ).toEqual([]);
+  });
+});
+
+describe("needs you, counted once", () => {
+  it("leaves out a research thread's own waiting notice and empty notices", () => {
+    const data = {
+      workspaces: [
+        {
+          id: "p",
+          archived: false,
+          researches: [],
+        },
+      ],
+      collections: [],
+    } as unknown as Parameters<typeof needsYou>[0];
+    const note = (id: string, text: string, thread: string | null) =>
+      ({
+        id,
+        workspace_id: "p",
+        channel_id: "c",
+        thread_id: thread,
+        text,
+        created_at: "2026-10-25T00:00:00Z",
+        data: { waiting: true },
+      }) as unknown as Parameters<typeof needsYou>[1][number];
+    const items = needsYou(data, [
+      note("a", "", null),
+      note("b", "Approve?", "research:r"),
+      note("c", "Pick a seed count", null),
+    ]);
+    expect(items.map((item) => item.title)).toEqual(["Pick a seed count"]);
   });
 });

@@ -15,9 +15,10 @@ import {
 import { useEffect, useState, type ReactNode } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { builtinWorkflow } from "../../workflows/workflows-api";
 import { useI18n } from "../../../i18n/I18nProvider";
 import type { MessageKey } from "../../../i18n/i18n";
-import { Button, IconButton, Spinner, toast } from "../../../ui";
+import { Button, Dialog, IconButton, Spinner, toast } from "../../../ui";
 import { describeStep } from "../describe";
 import type {
   Compute,
@@ -334,6 +335,7 @@ function PlanCard({
   const { t } = useI18n();
   const compute = computes.find((c) => c.id === plan.compute_id);
   const [whole, setWhole] = useState(false);
+  const [confirming, setConfirming] = useState(false);
   useEffect(() => {
     if (approved) setWhole(false);
   }, [approved]);
@@ -499,13 +501,52 @@ function PlanCard({
             loading={actions.busy}
             disabled={!!plan.inherited}
             onClick={() => {
-              if (!plan.inherited) actions.approvePlan(plan.version);
+              if (!plan.inherited) setConfirming(true);
             }}
           >
             {t("research.plan.start")}
           </Button>
         </footer>
       )}
+      {/* Experiments download, run and spend: say what will happen before it does. */}
+      <Dialog
+        open={confirming}
+        title={t("research.plan.confirm")}
+        onClose={() => setConfirming(false)}
+        footer={
+          <>
+            <Button variant="ghost" onClick={() => setConfirming(false)}>
+              {t("common.cancel")}
+            </Button>
+            <Button
+              variant="primary"
+              loading={actions.busy}
+              onClick={() => {
+                setConfirming(false);
+                actions.approvePlan(plan.version);
+              }}
+            >
+              {t("research.plan.start")}
+            </Button>
+          </>
+        }
+      >
+        <dl className={styles.confirmList}>
+          <dt>{t("research.plan.confirmMachine")}</dt>
+          <dd>{compute?.name ?? plan.compute_id}</dd>
+          <dt>{t("research.plan.confirmSteps")}</dt>
+          <dd>{plan.hypotheses.length}</dd>
+          <dt>{t("research.plan.confirmBudget")}</dt>
+          <dd>
+            {plan.budget?.max_sprints || plan.budget?.max_job_hours
+              ? t("research.plan.budget", {
+                  sprints: plan.budget.max_sprints ?? "∞",
+                  hours: plan.budget.max_job_hours ?? "∞",
+                })
+              : t("research.plan.noLimit")}
+          </dd>
+        </dl>
+      </Dialog>
     </article>
   );
 }
@@ -824,14 +865,16 @@ function WorkBlock({
         )
       }
     >
-      {run?.runtime.rule && project.workspace_id && (
-        <a
-          className={settingStyles.ruleLink}
-          href={`#${ruleHash(project.workspace_id, run.runtime.rule.workflow, run.runtime.rule.workflow_version, run.runtime.rule.rule)}`}
-        >
-          {run.runtime.rule.rule}
-        </a>
-      )}
+      {run?.runtime.rule &&
+        project.workspace_id &&
+        !builtinWorkflow(run.runtime.rule.workflow) && (
+          <a
+            className={settingStyles.ruleLink}
+            href={`#${ruleHash(project.workspace_id, run.runtime.rule.workflow, run.runtime.rule.workflow_version, run.runtime.rule.rule)}`}
+          >
+            {run.runtime.rule.rule}
+          </a>
+        )}
       {item.jobs.map((job) => (
         <RunCard key={job.id} job={job} computes={computes} actions={actions} />
       ))}

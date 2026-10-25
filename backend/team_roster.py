@@ -166,20 +166,15 @@ def join(d, workspace, key, *, announce=True):
         ensure_member(member)
         follow(d, workspace, member)
     if announce:
-        general = d.get(TeamChannel, stable(workspace, "general"))
-        if general is not None:
-            d.add(
-                TeamMessage(
-                    workspace_id=workspace.id,
-                    channel_id=general.id,
-                    author_id=member.id,
-                    text="加入了项目 / joined the project",
-                    kind="text",
-                    mentions=[],
-                    data={"joined": True},
-                    created_at=now(),
-                )
+        target = d.get(TeamChannel, stable(workspace, "experiments")) or d.scalar(
+            select(TeamChannel).where(
+                TeamChannel.workspace_id == workspace.id,
+                TeamChannel.member_id.is_(None),
+                TeamChannel.archived.is_(False),
             )
+        )
+        if target is not None:
+            _notice(d, workspace, member.id, target.id)
     d.flush()
     return member
 
@@ -191,7 +186,28 @@ def leave(d, workspace, member):
     d.flush()
 
 
-def call_on(d, workspace, ids):
+def announce(d, workspace, member_id, channel_id):
+    """Say in a conversation that a colleague joined, where they were called."""
+    _notice(d, workspace, member_id, channel_id)
+
+
+def _notice(d, workspace, member_id, channel_id):
+    d.add(
+        TeamMessage(
+            workspace_id=workspace.id,
+            channel_id=channel_id,
+            author_id=member_id,
+            text="",
+            kind="text",
+            mentions=[],
+            # A notice, not news: shown in place, never unread or a preview.
+            data={"joined": True, "read": True},
+            created_at=now(),
+        )
+    )
+
+
+def call_on(d, workspace, ids, channel_id=None):
     """Bring in any absent colleague an action or mention names."""
     present = list(
         d.scalars(select(TeamMember).where(TeamMember.workspace_id == workspace.id))
@@ -200,7 +216,10 @@ def call_on(d, workspace, ids):
     joined = []
     for identifier in dict.fromkeys(ids):
         if identifier in missing:
-            joined.append(join(d, workspace, missing[identifier]))
+            member = join(d, workspace, missing[identifier], announce=not channel_id)
+            if channel_id:
+                _notice(d, workspace, member.id, channel_id)
+            joined.append(member)
     return joined
 
 

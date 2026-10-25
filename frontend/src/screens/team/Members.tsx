@@ -271,10 +271,20 @@ export function Members({
               <Prose text={detail.activity} />
             </>
           )}
-          <h3>{t("members.description")}</h3>
-          <div className={styles.roleDescription}>
-            <Prose text={member.role_description ?? ""} />
-          </div>
+          {/* A built-in colleague's definition is a system prompt: show what they do in
+              a line. A hired colleague's role is the researcher's own words: show it. */}
+          {member.builtin ? (
+            member.description && (
+              <p className={styles.oneLine}>{member.description}</p>
+            )
+          ) : (
+            <>
+              <h3>{t("members.description")}</h3>
+              <div className={styles.roleDescription}>
+                <Prose text={member.role_description ?? ""} />
+              </div>
+            </>
+          )}
           {member.builtin && member.role !== "human" && (
             <Button onClick={() => setConfirm({ member, action: "restore" })}>
               {t(

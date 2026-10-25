@@ -1170,10 +1170,9 @@ test("侧栏入口登记表、待你决定、分页和固定 rail", async ({ pag
   await waiting
     .getByRole("link", { name: /冒烟研究|核对离线研究页面/ })
     .click();
+  // A research waiting on you opens as its own conversation.
   await expect(page).toHaveURL(
-    (url) =>
-      new URLSearchParams(url.hash.split("?")[1]).get("thread") ===
-      `research:${smoke.researchId}`,
+    (url) => url.hash === `#research/${smoke.researchId}`,
   );
   // The board is a fixed entry too; the rail stays as it is on every page.
   await nav.locator('[data-id="board"]').click();

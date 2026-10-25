@@ -1722,3 +1722,20 @@ section:hover > .messageActions,
     box-shadow: var(--ui-elev-2);
   }
 }
+
+/* Before experiments start: the machine, how many hypotheses, the budget. */
+.confirmList {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: var(--ui-space-8) var(--ui-space-16);
+  margin: 0;
+  font-size: var(--ui-text-14);
+}
+
+.confirmList dt {
+  color: var(--ui-fg-2);
+}
+
+.confirmList dd {
+  margin: 0;
+}

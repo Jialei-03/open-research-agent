@@ -370,6 +370,7 @@ def apply(d, workspace, message, flow, actions):
         d,
         workspace,
         [a["member"] for a in actions if a["action"] in {"wake", "review"}],
+        channel_id=message.channel_id,
     )
     for action in actions:
         metadata = provenance(flow, action)

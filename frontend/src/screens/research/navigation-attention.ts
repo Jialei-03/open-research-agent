@@ -15,7 +15,12 @@ export function needsYou(
     ...messages
       .filter(
         (message) =>
-          workspaceIds.has(message.workspace_id) && message.data.waiting,
+          workspaceIds.has(message.workspace_id) &&
+          message.data.waiting &&
+          // A research waiting on you is counted once, by the research itself;
+          // a waiting notice with nothing to read is not a decision to make.
+          !message.thread_id?.startsWith("research:") &&
+          !!message.text.trim(),
       )
       .map((message) => ({
         id: `message:${message.workspace_id}:${message.id}`,
@@ -40,7 +45,7 @@ export function needsYou(
         workspaceId: research.workspace_id,
         title: research.title || research.question,
         at: research.updated_at || "",
-        hash: teamHash(research.workspace_id, "", `research:${research.id}`),
+        hash: `research/${research.id}`,
       })),
   ].sort((a, b) => b.at.localeCompare(a.at) || a.id.localeCompare(b.id));
 }

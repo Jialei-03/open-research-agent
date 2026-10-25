@@ -588,7 +588,15 @@ def project(d, workspace, *, through=None):
                 if p
                 else plain_text(root.text)[:200]
                 if root
-                else channel.name,
+                # Work in a group's own stream is named by what was asked there.
+                else next(
+                    (
+                        plain_text(m.text)[:200]
+                        for m in reversed(target["messages"])
+                        if m.author_id in human and plain_text(m.text)
+                    ),
+                    channel.name,
+                ),
                 "group": group,
                 "member_ids": responsible,
                 "status": "failed"

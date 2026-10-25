@@ -97,6 +97,7 @@ import {
   readWorkflows,
   workflowName,
   type Workflow,
+  builtinWorkflow,
 } from "../workflows/workflows-api";
 import { useResearchNavigation } from "./ResearchNavigation";
 import { MemberStatus, useTeam } from "./TeamNavigation";
@@ -124,7 +125,7 @@ import {
   type TeamCatchup as Catchup,
 } from "./team-api";
 import {
-  defaultChannelNames,
+  groupName,
   memberLabel,
   mentionMatches,
   mentionQuery,
@@ -255,11 +256,7 @@ export function TeamScreen({
     memberLabel(member, t) || channel?.name || "";
   const title = channel?.member_id
     ? memberName(team!.members.find((m) => m.id === channel.member_id))
-    : (channel
-        ? defaultChannelNames[channel.key] === channel.name
-          ? t(`team.channel.${channel.key}` as MessageKey)
-          : channel.name
-        : "") ||
+    : (channel ? groupName(channel, t) : "") ||
       t(
         channelId === "work"
           ? "team.work.title"
@@ -978,11 +975,7 @@ function MessagePane({
             ) : (
               <>
                 <GroupAvatar members={team.members} />
-                <span>
-                  {defaultChannelNames[channel.key] === channel.name
-                    ? t(`team.channel.${channel.key}` as MessageKey)
-                    : channel.name}
-                </span>
+                <span>{groupName(channel, t)}</span>
               </>
             )}
           </div>
@@ -1550,14 +1543,16 @@ export function MessageRow({
               )}
             </button>
           )}
-          {message.data.rule && message.data.rule !== "@mention" && (
-            <a
-              className={settingStyles.ruleLink}
-              href={`#${ruleHash(team.workspace_id, message.data.workflow || "research", message.data.workflow_version || 1, message.data.rule)}`}
-            >
-              {message.data.rule}
-            </a>
-          )}
+          {message.data.rule &&
+            message.data.rule !== "@mention" &&
+            !builtinWorkflow(message.data.workflow) && (
+              <a
+                className={settingStyles.ruleLink}
+                href={`#${ruleHash(team.workspace_id, message.data.workflow || "research", message.data.workflow_version || 1, message.data.rule)}`}
+              >
+                {message.data.rule}
+              </a>
+            )}
         </footer>
       </div>
       <div className={styles.hoverActions}>
@@ -1832,7 +1827,7 @@ export function TeamComposer({
     ? dmMember
       ? name(dmMember)
       : channel.name
-    : `#${defaultChannelNames[channel.key] === channel.name ? t(`team.channel.${channel.key}` as MessageKey) : channel.name}`;
+    : `#${groupName(channel, t)}`;
   const query = !dismissed ? mentionQuery(text, caret) : null;
   const matches = query ? mentionMatches(team.members, query.query, name) : [];
   const active = team.members.some(

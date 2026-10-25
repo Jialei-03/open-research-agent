@@ -99,11 +99,7 @@ export function ProjectRail({
                 aria-current={active ? "page" : undefined}
                 onClick={followLink(go, target)}
               >
-                {own ? (
-                  <User size={18} aria-hidden />
-                ) : (
-                  Array.from(w.name.trim())[0] || "·"
-                )}
+                {own ? <User size={18} aria-hidden /> : initials(w.name)}
                 {count > 0 && (
                   <span
                     className={styles.tileCount}
@@ -152,4 +148,13 @@ export function ProjectRail({
       )}
     </div>
   );
+}
+
+/** A tile's mark: one character of a Chinese or Japanese name, two letters of a Latin one. */
+function initials(name: string) {
+  const chars = Array.from(name.trim());
+  if (!chars.length) return "·";
+  if (!/^[A-Za-z0-9]$/.test(chars[0])) return chars[0];
+  const latin = chars.filter((c) => /[A-Za-z0-9]/.test(c));
+  return latin.slice(0, 2).join("").toUpperCase();
 }

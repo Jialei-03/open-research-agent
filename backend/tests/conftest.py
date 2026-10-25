@@ -9,6 +9,12 @@ def full_team(request, monkeypatch):
     """
     if request.node.get_closest_marker("roster"):
         return
-    from backend import team_roster
+    from backend import research_team, team_roster
 
     monkeypatch.setattr(team_roster, "DEFAULT", tuple(team_roster.builtin_roles()))
+    # ...and with the four groups projects used to start with.
+    monkeypatch.setattr(
+        research_team,
+        "CHANNELS",
+        {"review": "综述", "experiments": "实验", "writing": "写作", "general": "闲聊"},
+    )

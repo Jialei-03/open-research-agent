@@ -1956,16 +1956,9 @@ test("needs you opens pending conversations and sidebar entries expose real stat
   await inbox
     .getByRole("link", { name: new RegExp(research.question) })
     .click();
-  await expect(page).toHaveURL(
-    (url) => url.hash === `#${teamHash(wid, "", `research:${rid}`)}`,
-  );
-  const thread = page.getByRole("region", { name: "线程", exact: true });
-  await expect(
-    thread.getByRole("heading", { name: research.question, exact: true }),
-  ).toBeVisible();
-  await expect(
-    thread.getByRole("textbox", { name: "消息", exact: true }),
-  ).toHaveAttribute("placeholder", "发送给 #实验");
+  // A research waiting on you opens as its own conversation.
+  await expect(page).toHaveURL((url) => url.hash === `#research/${rid}`);
+  await expect(page.getByTestId("research-conversation")).toBeVisible();
   expect(state.direct).toEqual([]);
 });
 
@@ -3309,6 +3302,19 @@ for (const locale of ["zh", "en"] as const) {
     await page.keyboard.press("Tab");
     await expect(start).toBeFocused();
     await page.keyboard.press("Enter");
+    // Experiments start only after the confirmation says what will happen.
+    const confirm = page.getByRole("dialog", {
+      name: locale === "zh" ? "开始实验？" : "Start the experiments?",
+      exact: true,
+    });
+    await expect(confirm).toBeVisible();
+    expect(approved).toBe(false);
+    await confirm
+      .getByRole("button", {
+        name: locale === "zh" ? "开始实验" : "Start experiments",
+        exact: true,
+      })
+      .click();
     await expect.poll(() => approved).toBe(true);
     const accept = page.getByRole("button", {
       name: locale === "zh" ? "接受结论" : "Accept conclusion",

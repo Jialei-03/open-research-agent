@@ -800,9 +800,15 @@ def _process(app, job_id, cfg):
                     "images": images,
                 }
             except Exception as e:  # noqa: BLE001 - isolate tool/provider failures without exposing secrets
+                import httpx
+
                 message = (
                     str(e)[:500]
                     if isinstance(e, ValueError)
+                    # Network failures say so: the fix is the connection or proxy, not a retry.
+                    else "网络连接失败或超时，可能需要检查网络或代理 / "
+                    "Network unreachable or timed out: check the connection or proxy"
+                    if isinstance(e, (httpx.TransportError, TimeoutError, ConnectionError))
                     else "工具执行失败或超时，请重试"
                 )
                 if not isinstance(e, ValueError):

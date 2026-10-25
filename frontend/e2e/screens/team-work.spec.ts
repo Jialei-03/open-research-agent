@@ -123,8 +123,7 @@ test("work navigation groups derived work, opens threads and shows member attent
   await expect(
     board.getByRole("heading", { name: tn("team.work.headline", 1) }),
   ).toBeVisible();
-  await expect(board).toContainText(tn("team.work.asks", 2));
-  await expect(board).toContainText(t("team.work.partial"));
+  await expect(board).not.toContainText(tn("team.work.asks", 2));
   await expect(board).toContainText(t("team.work.stuck"));
   // Four columns by state; review is work under way.
   const lane = (name: string) =>

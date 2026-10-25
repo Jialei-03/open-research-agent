@@ -2451,18 +2451,17 @@ for (const theme of ["light", "dark"] as const) {
         .getByRole("link", { name: "reviewer", exact: true })
         .locator("time"),
     ).toHaveText("10月18日");
-    // Activity has no row; its unread count sits on the project's menu button.
-    const menuCount = sidebar.getByLabel("2 条未读", { exact: true });
-    await expect(menuCount).toHaveText("2");
-    const color = await menuCount.evaluate((node) => {
-      const probe = document.createElement("span");
-      probe.style.color = "var(--ui-danger)";
-      node.appendChild(probe);
-      const expected = getComputedStyle(probe).color;
-      probe.remove();
-      return expected;
-    });
-    await expect(menuCount).toHaveCSS("background-color", color);
+    // Activity has no row; its unread count is on its item in the project menu.
+    await expect(sidebar.getByLabel("2 条未读", { exact: true })).toHaveCount(
+      0,
+    );
+    await sidebar
+      .getByRole("button", { name: "项目菜单", exact: true })
+      .click();
+    await expect(
+      page.getByRole("menuitem", { name: "动态 · 2", exact: true }),
+    ).toBeVisible();
+    await page.keyboard.press("Escape");
     const add = sidebar.getByRole("button", { name: "新建频道", exact: true });
     await add.click();
     await expect(
@@ -2787,14 +2786,13 @@ for (const [locale, width] of [
       if (await expand.isVisible()) await expand.click();
     };
     await openSidebar();
-    // Activity is behind the project's menu; its unread count sits on the button.
-    const count = sidebar.getByLabel(t("team.unreadCount", { count: 1 }), {
-      exact: true,
-    });
-    await expect(count).toHaveText("1");
+    // Activity is behind the project's menu; its unread count is on its item there.
     await sidebar.locator('[data-id="project-menu"]').click();
     await page
-      .getByRole("menuitem", { name: t("team.activity"), exact: true })
+      .getByRole("menuitem", {
+        name: `${t("team.activity")} · 1`,
+        exact: true,
+      })
       .click();
     const event = page.locator('[data-activity-id="reminder-event"]');
     await expect(event).toHaveAttribute("data-unread", "true");
@@ -2805,7 +2803,12 @@ for (const [locale, width] of [
     await expect.poll(() => read).toBe(true);
     await openSidebar();
     await expect(sidebar.locator('[data-id="project-menu"]')).toBeVisible();
-    await expect(count).toHaveCount(0);
+    // Once read, the activity item no longer carries a count.
+    await sidebar.locator('[data-id="project-menu"]').click();
+    await expect(
+      page.getByRole("menuitem", { name: t("team.activity"), exact: true }),
+    ).toBeVisible();
+    await page.keyboard.press("Escape");
   });
 }
 

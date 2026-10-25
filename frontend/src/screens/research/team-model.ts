@@ -1,5 +1,5 @@
 import { zh } from "../../i18n/messages/zh";
-import { createTranslator } from "../../i18n/i18n";
+import { createTranslator, type MessageKey } from "../../i18n/i18n";
 import type {
   Team,
   TeamActivity,
@@ -123,11 +123,7 @@ export function conversationName(
   const member = members.find((member) => member.id === channel.member_id);
   if (member) return memberName(member, t);
   if (channel.member_id) return channel.name;
-  return `#${
-    defaultChannelNames[channel.key] === channel.name
-      ? t(`team.channel.${channel.key}` as Parameters<typeof t>[0])
-      : channel.name
-  }`;
+  return `#${groupName(channel, t as (key: MessageKey) => string)}`;
 }
 
 export function threadDate(
@@ -184,6 +180,20 @@ export function threadDate(
         }),
   }).format(date);
 }
+
+/** A group's name in the interface language: built-in names are translated, others kept. */
+export function groupName(
+  channel: { key: string; name: string },
+  t: (key: MessageKey) => string,
+) {
+  // A new project's one group is everyone; its name presets no task.
+  if (channel.key === "experiments" && channel.name === EVERYONE)
+    return t("team.channel.everyone");
+  return defaultChannelNames[channel.key] === channel.name
+    ? t(`team.channel.${channel.key}` as MessageKey)
+    : channel.name;
+}
+export const EVERYONE = "\u5168\u5458";
 
 export const defaultChannelNames: Record<string, string> = {
   review: zh["team.channel.review"],

@@ -6,10 +6,20 @@ from sqlalchemy import select
 from backend.models import TeamChannel, TeamDelivery, TeamMember, TeamMessage
 from backend.tests.test_acceptance import env as cloud_env  # noqa: F401
 from backend.tests.test_research_routes import env  # noqa: F401
-from backend.tests.test_research_team import send, world  # noqa: F401
+from backend.tests.test_research_team import send as send_to, world  # noqa: F401
 
 pytestmark = pytest.mark.roster
 
+
+def group(world):
+    """A new project's one group."""
+    return next(
+        c["id"] for c in world[1].get(world[7]).json()["channels"] if not c["member_id"]
+    )
+
+
+def send(world, text, channel=None, **extra):
+    return send_to(world, text, channel or group(world), **extra)
 
 def present(app, wid):
     with app.state.maker() as d:
@@ -26,6 +36,9 @@ def present(app, wid):
 def test_a_new_project_has_the_researcher_and_the_advisor(world):
     app, a, _, _, _, _, wid, base, overview = world
     assert present(app, wid) == {"human", "advisor"}
+    # One group, everyone in it, no kind of work preset.
+    groups = [c for c in overview["channels"] if not c["member_id"]]
+    assert [(c["key"], c["name"]) for c in groups] == [("experiments", "全员")]
     dms = [c for c in overview["channels"] if c["member_id"]]
     assert [c["key"] for c in dms] == ["dm:advisor"]
     roster = a.get("/api/v1/research/colleagues").json()
@@ -61,7 +74,9 @@ def test_naming_a_colleague_brings_them_in_and_wakes_them(world):
         joined = d.scalar(
             select(TeamMessage).where(TeamMessage.author_id == writer.id)
         )
-        assert joined.data == {"joined": True}
+        # The notice is in the conversation they were named in, and is not news.
+        assert joined.data == {"joined": True, "read": True}
+        assert joined.channel_id == group(world)
 
 
 def test_colleagues_join_and_leave_but_the_advisor_stays(world):
@@ -98,7 +113,7 @@ def test_the_research_workflow_validates_and_calls_absent_colleagues_in(world):
         team_rules.validate_workflow(flow, members=members, channels=channels)
         general = d.scalar(
             select(TeamChannel).where(
-                TeamChannel.workspace_id == wid, TeamChannel.key == "general"
+                TeamChannel.workspace_id == wid, TeamChannel.member_id.is_(None)
             )
         )
         message = TeamMessage(
@@ -219,7 +234,7 @@ def test_members_edit_their_memory_with_the_tool(world):
 
     app, _, _, settings, owner, _, wid, _, overview = world
     advisor = next(m["id"] for m in overview["members"] if m["role"] == "advisor")
-    general = next(c["id"] for c in overview["channels"] if c["key"] == "general")
+    general = group(world)
     info = {"workspace_id": wid, "member_id": advisor, "channel_id": general}
     call = research_team_tools._call
     result = call(app, owner, info, "team_memory", {
@@ -325,7 +340,7 @@ def test_a_colleagues_conversations_list_where_they_work(world):
             )
         ).id
     rows = a.get(base + f"/members/{writer}/conversations").json()
-    general = next(c["id"] for c in overview["channels"] if c["key"] == "general")
+    general = group(world)
     assert rows[0]["channel_id"] == general and rows[0]["thread_id"] is None
     assert rows[0]["title"].startswith("#") and rows[0]["status"] in {
         "queued",
@@ -344,7 +359,7 @@ def test_a_direct_message_is_the_researcher_and_one_colleague(world):
     executor = a.post(base + "/members/join", json={"key": "executor"}).json()["id"]
     channels = a.get(base).json()["channels"]
     dm = next(c["id"] for c in channels if c["member_id"] == executor)
-    general = next(c["id"] for c in channels if c["key"] == "general")
+    general = group(world)
     info = {"workspace_id": wid, "member_id": reviewer, "channel_id": general}
     # Another colleague cannot write into it...
     with pytest.raises(ValueError):
@@ -382,3 +397,26 @@ def test_a_direct_message_is_the_researcher_and_one_colleague(world):
     assert shown[0]["text"] == "你好"
     # Everything else here is the colleague answering the researcher.
     assert {m["author_id"] for m in shown[1:]} <= {executor}
+
+
+def test_project_spend_is_actual_and_never_goes_back(world):
+    from backend.models import ModelUsage, TeamDelivery
+
+    app, a, _, _, owner, _, wid, base, _ = world
+    send(world, "@导师 你好")
+    with app.state.maker() as d:
+        run_id = d.scalars(select(TeamDelivery)).first().run_id
+        usage = ModelUsage(
+            owner=owner, source="agent", task_id=run_id, model="fake",
+            reserved_tokens=131072, status="started",
+        )
+        d.add(usage)
+        d.commit()
+        usage_id = usage.id
+    # An in-flight reservation is not spend.
+    assert a.get(base).json()["tokens"] == 0
+    with app.state.maker() as d:
+        row = d.get(ModelUsage, usage_id)
+        row.total_tokens, row.status = 62848, "completed"
+        d.commit()
+    assert a.get(base).json()["tokens"] == 62848

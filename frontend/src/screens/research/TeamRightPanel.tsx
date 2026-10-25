@@ -834,8 +834,18 @@ function Desk({
                   task.run!.status}
               </span>
               <span className={styles.treeName}>
-                {(task.preview || task.text || "").split("\n")[0] ||
-                  t("team.noContent")}
+                {/* A task is named by what was asked, not by its answer. */}
+                {(
+                  messages.find(
+                    (m) =>
+                      m.id ===
+                      (task.run!.runtime as { team?: { message_id?: string } })
+                        ?.team?.message_id,
+                  )?.text ||
+                  task.preview ||
+                  task.text ||
+                  ""
+                ).split("\n")[0] || t("team.noContent")}
               </span>
               <time className={styles.taskWhen}>
                 {threadDate(task.created_at, locale, new Date(), "relative")}

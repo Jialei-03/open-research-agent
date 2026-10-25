@@ -33,12 +33,10 @@ ROLES = {
     "writer": ("写手", "Writer"),
     "distiller": ("提炼者", "Distiller"),
 }
-CHANNELS = {
-    "review": "综述",
-    "experiments": "实验",
-    "writing": "写作",
-    "general": "闲聊",
-}
+# A new project has one group, everyone in it; it presets no kind of work.
+# (Its key stays "experiments": research threads hang off it.) Older projects
+# keep the four groups they were made with.
+CHANNELS = {"experiments": "全员"}
 ACTIVE = {"queued", "running"}
 
 
@@ -313,7 +311,10 @@ def mentions(d, workspace, text):
             )
         ]
         if positions:
-            found.append((min(positions), join(d, workspace, colleague["key"]).id))
+            member = join(d, workspace, colleague["key"], announce=False)
+            # The caller says where they were named, so the notice lands there.
+            d.info.setdefault("ora_joined", []).append(member.id)
+            found.append((min(positions), member.id))
     return [identifier for _, identifier in sorted(found)]
 
 
@@ -400,6 +401,10 @@ def post(
     )
     d.add(message)
     d.flush()
+    from .team_roster import announce
+
+    for joined in dict.fromkeys(d.info.pop("ora_joined", [])):
+        announce(d, workspace, joined, channel.id)
     from .team_workflows import route_message
 
     message.data = {**message.data, "mode": mode}
@@ -1051,7 +1056,7 @@ def overview(d, workspace, *, include_reminders=True):
     for message in reversed(messages):
         if message.kind == "reminder":
             continue
-        if message.channel_id in last_messages:
+        if message.channel_id in last_messages or message.data.get("joined"):
             continue
         value = unread_values.get(message.id) or message_out(d, message)
         if not has_message_content(value):
@@ -1086,7 +1091,7 @@ def overview(d, workspace, *, include_reminders=True):
     )
     notifications = {m["id"]: m for m in unread}
     notifications.update({event["id"]: event for event in unread_events})
-    from .team_budgets import limits, tokens
+    from .team_budgets import limits, spent
 
     pin_channels = list(
         d.scalars(
@@ -1133,7 +1138,8 @@ def overview(d, workspace, *, include_reminders=True):
         ),
         mentions_unread=sum(human in m.mentions for m in unread_messages),
         activity_unread=len(unread_events),
-        tokens=tokens(d, workspace=workspace),
+        # Shown as the project's spend: actual and cumulative, never going back.
+        tokens=spent(d, workspace),
         max_tokens=limits(workspace)["max_tokens"],
         budget=limits(workspace),
     )

@@ -83,7 +83,9 @@ def snapshot(settings, owner, key):
         "(conventions, pitfalls, what worked), `user` for what you learn about "
         "the researcher (preferences, how they want results). Save only what will "
         "matter again; keep entries short; replace stale ones. Project content "
-        "(data, results, paper details) stays in the project, not here."
+        "(data, results, paper details) stays in the project, not here. When the "
+        "researcher states a preference, corrects you, or praises how you did "
+        "something, record it before you reply."
     ]
     for target, title in (("memory", "Your notes"), ("user", "About the researcher")):
         if memory[target]:

@@ -55,7 +55,7 @@ import { CreateWorkspaceDialog, WorkspacePicker } from "./WorkspaceDialogs";
 import { SidebarResearches } from "./SidebarResearches";
 import { GroupAvatar } from "./GroupAvatar";
 import styles from "./Team.module.css";
-import { defaultChannelNames, threadDate } from "./team-model";
+import { groupName, threadDate } from "./team-model";
 import nav from "./TeamNavigation.module.css";
 
 export function useTeam(id: string) {
@@ -176,7 +176,10 @@ export function ProjectHeader({
               {
                 id: "activity",
                 icon: Bell,
-                label: t("team.activity"),
+                // Unread activity is counted where it is read, not on the menu button.
+                label: unread
+                  ? `${t("team.activity")} · ${unread}`
+                  : t("team.activity"),
                 onSelect: () => go(teamHash(id, "mentions")),
               },
               {
@@ -187,15 +190,6 @@ export function ProjectHeader({
               },
             ]}
           />
-          {unread > 0 && (
-            <span
-              className={nav.menuCount}
-              role="img"
-              aria-label={t("team.unreadCount", { count: unread })}
-            >
-              {unread}
-            </span>
-          )}
         </span>
       )}
     </div>
@@ -420,11 +414,7 @@ export function TeamConversationList({
     const member = channel.member_id
       ? members.get(channel.member_id)
       : undefined;
-    const name = member
-      ? memberName(member, t)
-      : defaultChannelNames[channel.key] === channel.name
-        ? t(`team.channel.${channel.key}` as MessageKey)
-        : channel.name;
+    const name = member ? memberName(member, t) : groupName(channel, t);
     // Empty messages (a run that said nothing) leave no preview.
     const last = channel.last_message?.text?.trim()
       ? channel.last_message
@@ -615,11 +605,7 @@ function AllConversations({ go }: { go(hash: string): void }) {
             return {
               key: `c:${c.id}`,
               at: c.last_at || "",
-              name: member
-                ? memberName(member, t)
-                : defaultChannelNames[c.key] === c.name
-                  ? t(`team.channel.${c.key}` as MessageKey)
-                  : c.name,
+              name: member ? memberName(member, t) : groupName(c, t),
               hash: teamHash(w.id, c.id),
               mark: member ? ("dm" as const) : ("group" as const),
             };

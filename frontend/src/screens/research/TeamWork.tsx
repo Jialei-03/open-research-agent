@@ -131,7 +131,6 @@ export function TeamWorkView({
             ? tn("team.work.headline", work.counts.waiting)
             : t("team.work.clear")}
         </h2>
-        <AttentionLine value={work.attention.total} />
         <span className={styles.grow} />
         <SegmentedControl
           kind="radio"

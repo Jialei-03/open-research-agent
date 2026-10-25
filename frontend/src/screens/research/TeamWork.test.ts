@@ -107,8 +107,8 @@ describe("team work projection view", () => {
       expect(html).toContain(t("team.work.stuck"));
       expect(html).toContain("draft.md");
       expect(html).toContain('title="Ada"');
-      expect(html).toContain(tn("team.work.asks", 2));
-      expect(html).not.toContain(t("team.work.partial"));
+      // The board says what waits; the attention metrics are not its business.
+      expect(html).not.toContain(tn("team.work.asks", 2));
     });
     it(`${locale} shows zero waits and marks incomplete metrics without inventing zero durations`, () => {
       expect(
