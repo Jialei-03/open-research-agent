@@ -283,7 +283,17 @@ export async function seedSmokeData(page: Page) {
       if (path === "/navigation")
         return reply({
           workspaces: workspace
-            ? [{ ...workspace, researches: researches() }]
+            ? [
+                { ...workspace, researches: researches() },
+                // Everyone has a personal space, with every colleague in it.
+                {
+                  ...workspace,
+                  id: "aaaaaaaa-aaaa-4aaa-8aaa-00000000000f",
+                  name: "个人空间",
+                  kind: "personal",
+                  researches: [],
+                },
+              ]
             : [],
           collections: collection ? [collection] : [],
         });

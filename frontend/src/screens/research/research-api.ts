@@ -513,7 +513,7 @@ export interface Workspace {
   name: string;
   description: string;
   instructions: string;
-  kind: "research" | "eval";
+  kind: "research" | "eval" | "personal";
   compute_id: string;
   model_config_id: string;
   session_id?: string;

@@ -74,6 +74,7 @@ export function WorkspacePicker({
   const workspaces = data.workspaces.filter(
     (workspace) =>
       !workspace.archived &&
+      workspace.kind !== "personal" &&
       `${workspace.name} ${workspace.location.path} ${machine(workspace.location).title}`
         .toLocaleLowerCase()
         .includes(search.toLocaleLowerCase()),

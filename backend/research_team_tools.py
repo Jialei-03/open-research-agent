@@ -14,6 +14,7 @@ LABELS.update(
     team_read_thread="读线程",
     team_overview="读团队",
     team_set_status="设置状态",
+    team_memory="记下",
     team_review_result="提交评审",
     team_wait_for_owner="等负责人",
     team_search_papers="学术检索",
@@ -111,6 +112,18 @@ TEAM_TOOLS = [
         ["channel_id", "thread_id"],
     ),
     tool("team_overview", "Read team members, channels, research and budgets."),
+    tool(
+        "team_memory",
+        "Edit your own memory, kept across projects and sessions. target `memory`: what you learned about doing the work; `user`: what you learned about the researcher. action add (content), replace (old_text, content) or remove (old_text); old_text is a short unique part of the entry. Keep entries short; project content stays in the project.",
+        {
+            "action": {"type": "string", "enum": ["add", "replace", "remove"]},
+            "target": {"type": "string", "enum": ["memory", "user"]},
+            "content": {"type": "string", "maxLength": 1000},
+            "old_text": {"type": "string", "maxLength": 200},
+        },
+        ["action", "target"],
+        write=True,
+    ),
 ]
 
 for spec in TEAM_TOOLS:
@@ -162,6 +175,19 @@ def _call(app, owner, info, name, args):
             d, workspace, args.get("channel_id") or info["channel_id"]
         )
         thread_id = args.get("thread_id")
+        if name == "team_memory":
+            from .team_memory import change
+            from .team_roster import key_of
+
+            return change(
+                d.info.get("settings"),
+                owner,
+                key_of(member),
+                args.get("action", ""),
+                args.get("target", ""),
+                args.get("content", ""),
+                args.get("old_text", ""),
+            )
         if name == "team_set_status":
             text = args.get("text")
             if (

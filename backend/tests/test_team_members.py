@@ -49,7 +49,9 @@ def test_create_edit_delete_and_isolation(world):
     assert a.get(base + f"/members/{mid}").status_code == 404
     with app.state.maker() as d:
         assert d.get(TeamMember, mid).deleted
-        assert team.mentions(d, d.get(ResearchWorkspace, world[6]), "@Ada II") == []
+        # Removed from the project, still on the roster: naming her brings her back.
+        assert team.mentions(d, d.get(ResearchWorkspace, world[6]), "@Ada II") == [mid]
+        assert not d.get(TeamMember, mid).deleted
 
 
 def test_copy_builtin_identity_and_configuration_are_editable(world):
@@ -60,7 +62,9 @@ def test_copy_builtin_identity_and_configuration_are_editable(world):
     clone = a.get(base + f"/members/{copied.json()['id']}").json()
     assert clone["role_description"] == executor["role_description"]
     assert clone["permissions"] == executor["permissions"] and not clone["builtin"]
-    assert a.delete(base + f"/members/{executor['id']}").status_code == 422
+    # A built-in colleague can leave the project; only the advisor stays.
+    advisor = next(m for m in overview["members"] if m["role"] == "advisor")
+    assert a.delete(base + f"/members/{advisor['id']}").status_code == 422
     fields = {k: executor[k] for k in MemberConfig.model_fields}
     fields.update(model_config_id=model, wake_turns=2, wake_tokens=500)
     fields["permissions"]["commands"] = False
@@ -183,7 +187,7 @@ def test_subscribers_are_real_members_and_share_rule_limit(world):
     assert len(deliveries(app)) == 1
 
 
-def test_library_sync_preserves_each_teams_overrides_and_requires_choice(world):
+def test_one_colleague_one_definition_through_library_and_projects(world):
     _, a, b, _, _, _, _, base, _ = world
     mid, body = create(world)
     library = a.get(base + "/library").json()[0]
@@ -192,48 +196,37 @@ def test_library_sync_preserves_each_teams_overrides_and_requires_choice(world):
     other = a.post(base2 + "/members", json={"library_id": library["id"]})
     assert other.status_code == 200, other.text
     oid = other.json()["id"]
-    override = {**body, "role_description": "Team-specific skill"}
+    # An edit in one project is the colleague's: the other project and the library follow.
+    edited = {**body, "role_description": "Shared skill"}
     assert (
-        a.patch(base2 + f"/members/{oid}", json={"config": override}).status_code == 200
+        a.patch(base2 + f"/members/{oid}", json={"config": edited}).status_code == 200
     )
+    assert a.get(base + f"/members/{mid}").json()["role_description"] == "Shared skill"
+    library = a.get(base + "/library").json()[0]
+    assert library["config"]["role_description"] == "Shared skill"
+    # Editing the library entry still asks whether projects follow.
     path = base + f"/library/{library['id']}"
     changed = {**body, "role_description": "New library skill", "wake_turns": 5}
-    assert a.patch(path, json={"config": changed, "version": 1}).status_code == 422
+    version = library["version"]
     assert (
-        b.patch(path, json={"config": changed, "version": 1, "sync": True}).status_code
+        a.patch(path, json={"config": changed, "version": version}).status_code == 422
+    )
+    assert (
+        b.patch(
+            path, json={"config": changed, "version": version, "sync": True}
+        ).status_code
         == 404
     )
     assert (
-        a.patch(path, json={"config": changed, "version": 1, "sync": True}).status_code
+        a.patch(
+            path, json={"config": changed, "version": version, "sync": True}
+        ).status_code
         == 200
     )
-    assert (
-        a.get(base + f"/members/{mid}").json()["role_description"]
-        == "New library skill"
-    )
-    synced = a.get(base2 + f"/members/{oid}").json()
-    assert (
-        synced["role_description"] == "Team-specific skill"
-        and synced["wake_turns"] == 5
-    )
-    assert (
-        a.patch(path, json={"config": changed, "version": 1, "sync": True}).status_code
-        == 409
-    )
-    changed["role_description"] = "Library only"
-    assert (
-        a.patch(path, json={"config": changed, "version": 2, "sync": False}).status_code
-        == 200
-    )
-    assert (
-        a.get(base + f"/members/{mid}").json()["role_description"]
-        == "New library skill"
-    )
-    assert (
-        a.patch(base2 + f"/members/{oid}", json={"reset_overrides": True}).status_code
-        == 200
-    )
-    assert a.get(base2 + f"/members/{oid}").json()["role_description"] == "Library only"
+    for url in (base + f"/members/{mid}", base2 + f"/members/{oid}"):
+        member = a.get(url).json()
+        assert member["role_description"] == "New library skill"
+        assert member["wake_turns"] == 5
 
 
 @pytest.mark.parametrize("research_round", [False, True])

@@ -139,10 +139,14 @@ export function ProjectHeader({
       <h2 className={nav.projectName} data-id={sidebarId("workspace")}>
         {all
           ? t("projects.all")
-          : workspace?.name ||
-            t(
-              data.workspaces.length ? "workspace.choose" : "sidebar.noProject",
-            )}
+          : workspace?.kind === "personal"
+            ? t("personal.title")
+            : workspace?.name ||
+              t(
+                data.workspaces.length
+                  ? "workspace.choose"
+                  : "sidebar.noProject",
+              )}
       </h2>
       {id && !all && (
         <span className={nav.menuAnchor}>

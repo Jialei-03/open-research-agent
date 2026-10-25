@@ -14,7 +14,9 @@ import styles from "./AllProjects.module.css";
 export function AllProjects({ go }: { go(hash: string): void }) {
   const { t, tn } = useI18n();
   const { data, ready } = useResearchNavigation();
-  const open = data.workspaces.filter((w) => !w.archived);
+  const open = data.workspaces.filter(
+    (w) => !w.archived && w.kind !== "personal",
+  );
   const teams = useWorkspaceTeams(open.map((w) => w.id));
   const messages = [...teams].flatMap(([id, team]) =>
     team.notifications.map((m) => ({ ...m, workspace_id: id })),

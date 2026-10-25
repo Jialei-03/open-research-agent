@@ -103,11 +103,8 @@ describe("first research message", () => {
           model_config_id: "model-one",
         }),
       );
-      expect(go).toHaveBeenCalledWith(
-        hasExperiments
-          ? `team/${fixture.workspace}/${fixture.channel}?thread=research%3A${fixture.research}`
-          : `research/${fixture.research}`,
-      );
+      // A research opens as its own conversation, whatever channels the project has.
+      expect(go).toHaveBeenCalledWith(`research/${fixture.research}`);
       expect(parseAppRoute(go.mock.calls[0][0]).redirect).toBeUndefined();
       expect(notify).not.toHaveBeenCalled();
       expect(refreshResearchNavigation).toHaveBeenCalled();

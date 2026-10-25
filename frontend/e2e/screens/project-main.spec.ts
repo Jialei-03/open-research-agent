@@ -1205,13 +1205,8 @@ test("new research stays empty until the first message chooses a physical worksp
     path: testInfo.outputPath("new-research-zh-desktop.png"),
   });
   await start.getByRole("button", { name: "发送", exact: true }).click();
-  await expect(page).toHaveURL(
-    (url) =>
-      url.hash === `#${teamHash(wid, experiments, `research:${direct}`)}`,
-  );
-  await expect(
-    page.getByRole("region", { name: "线程", exact: true }),
-  ).toBeVisible();
+  // A research opens as its own conversation.
+  await expect(page).toHaveURL((url) => url.hash === `#research/${direct}`);
   expect(state.direct).toEqual([
     {
       message: "比较两个维度的表示质量",
@@ -1395,37 +1390,52 @@ for (const kind of ["local", "ssh"] as const) {
   });
 }
 
-test("with no project yet, the first question makes one named after it and starts there", async ({
+test("with no project chosen, the first words go to the advisor in the personal space", async ({
   page,
 }) => {
   const state = await project(page);
-  state.workspaces = [];
+  const personal = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
+  state.workspaces = [
+    {
+      ...state.workspaces[0],
+      id: personal,
+      name: "个人空间",
+      kind: "personal",
+    },
+  ];
   state.researches = [];
+  const sent: { url: string; body: { text: string } }[] = [];
+  await page.route("**/team/channels/*/messages", (route) => {
+    if (route.request().method() !== "POST") return route.fallback();
+    sent.push({
+      url: route.request().url(),
+      body: route.request().postDataJSON(),
+    });
+    return route.fulfill({ json: { id: "sent-1" } });
+  });
   await page.goto("/#all");
   await page.reload();
   // Nothing to oversee yet: All projects is the start screen.
   const start = page.getByTestId("new-research");
   await expect(start).toBeVisible();
-  const box = start.getByRole("textbox", { name: "开始研究" });
   const sendButton = start.getByRole("button", { name: "发送", exact: true });
   await expect(sendButton).toBeDisabled();
-  await box.fill("Adam 和 SGD 在 MNIST 上谁更好？");
-  await expect(sendButton).toBeEnabled();
+  await start.getByRole("textbox", { name: "开始研究" }).fill("你好");
   await sendButton.click();
-  await expect(page.getByTestId("new-research")).toHaveCount(0);
-  expect(state.workspaceRequests).toEqual([
+  // A greeting is a conversation, not a project or a research.
+  await expect(page).toHaveURL(
+    (url) => url.hash === `#team/${personal}/${advisorDM}`,
+  );
+  expect(sent).toEqual([
     {
-      name: "Adam 和 SGD 在 MNIST 上谁更好",
-      create_folder: true,
-      location: { kind: "local", path: "/home/leslie/ORA", connection_id: "" },
+      url: expect.stringContaining(
+        `/workspaces/${personal}/team/channels/${advisorDM}/messages`,
+      ),
+      body: expect.objectContaining({ text: "你好" }),
     },
   ]);
-  expect(state.direct).toEqual([
-    expect.objectContaining({
-      message: "Adam 和 SGD 在 MNIST 上谁更好？",
-      workspace_id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
-    }),
-  ]);
+  expect(state.workspaceRequests).toEqual([]);
+  expect(state.direct).toEqual([]);
 });
 
 test("workspace chooser creates a new folder without an empty research", async ({

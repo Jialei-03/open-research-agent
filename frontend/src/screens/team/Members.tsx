@@ -31,6 +31,14 @@ import { useResearchNavigation } from "../research/ResearchNavigation";
 import { MemberStatus } from "../research/TeamNavigation";
 import { Prose } from "../research/talk/ThreadView";
 import { MemberAvatar, MemberEditor } from "./MemberEditor";
+import { ColleagueMemory, ColleagueProjects } from "./ColleagueDetail";
+import {
+  colleagueKey,
+  colleagueName,
+  joinColleague,
+  listColleagues,
+  type Colleague,
+} from "./colleagues-api";
 import { MemberPause } from "./MemberPause";
 import { memberAvatarSeed, memberDraft, memberName } from "./member-model";
 import { threadDate } from "../research/team-model";
@@ -42,10 +50,18 @@ export function Members({
   team,
   selected,
   go,
+  roster = false,
+  hashFor,
+  hireOpen = false,
 }: {
   team: Team;
   selected?: string;
   go(hash: string): void;
+  /** The colleagues page: everyone the researcher has, not one project's members. */
+  roster?: boolean;
+  /** Where the list and a member's page live; a project's settings by default. */
+  hashFor?(member?: TeamMember): string;
+  hireOpen?: boolean;
 }) {
   const { t, locale } = useI18n();
   const { connections } = useResearchNavigation();
@@ -59,7 +75,29 @@ export function Members({
     drafted?: MemberConfig;
   } | null>(null);
   // Hiring: one sentence, a drafted agent file, then the usual editor.
-  const [hiring, setHiring] = useState(false);
+  const [hiring, setHiring] = useState(hireOpen);
+  useEffect(() => {
+    if (hireOpen) setHiring(true);
+  }, [hireOpen]);
+  const place = (m?: TeamMember) =>
+    hashFor
+      ? hashFor(m)
+      : settingsHash(team.workspace_id, m ? `member:${m.id}` : "members");
+  const [colleagues, setColleagues] = useState<Colleague[]>([]);
+  useEffect(() => {
+    let stale = false;
+    listColleagues().then(
+      (value) => !stale && setColleagues(value),
+      () => undefined,
+    );
+    return () => {
+      stale = true;
+    };
+  }, [team.members.length]);
+  const here = new Set(
+    team.members.filter((m) => !m.deleted).map((m) => colleagueKey(m)),
+  );
+  const absent = colleagues.filter((c) => !here.has(c.key));
   const [wanted, setWanted] = useState("");
   const [drafting, setDrafting] = useState(false);
   const [hireError, setHireError] = useState("");
@@ -183,7 +221,7 @@ export function Members({
             <IconButton
               icon={ArrowLeft}
               label={t("common.back")}
-              onClick={() => go(settingsHash(team.workspace_id, "members"))}
+              onClick={() => go(place())}
             />
             <div className={styles.identity}>
               <MemberAvatar member={member} />
@@ -220,11 +258,11 @@ export function Members({
               )}
             </div>
           </div>
-          <dl className={styles.stats}>
+          <dl className={styles.stats} hidden={roster}>
             <dt>{t("members.spent")}</dt>
             <dd>{(member.tokens ?? 0).toLocaleString()} token</dd>
           </dl>
-          {detail && detail.id === selected && detail.attention && (
+          {!roster && detail && detail.id === selected && detail.attention && (
             <AttentionLine value={detail.attention} />
           )}
           {detail?.activity && (
@@ -246,7 +284,17 @@ export function Members({
               )}
             </Button>
           )}
-          {member.library_id && (
+          {roster && member.role !== "human" && (
+            <>
+              <ColleagueProjects
+                colleagueKey={colleagueKey(member)}
+                colleagues={colleagues}
+                go={go}
+              />
+              <ColleagueMemory colleagueKey={colleagueKey(member)} />
+            </>
+          )}
+          {!roster && member.library_id && (
             <div className={styles.toolbar}>
               <Button
                 onClick={() => {
@@ -271,8 +319,8 @@ export function Members({
               )}
             </div>
           )}
-          <h3>{t("members.subscriptions")}</h3>
-          <div className={styles.checks}>
+          {!roster && <h3>{t("members.subscriptions")}</h3>}
+          <div className={styles.checks} hidden={roster}>
             {team.channels
               .filter((c) => !c.member_id)
               .map((c) => (
@@ -295,8 +343,12 @@ export function Members({
                 </label>
               ))}
           </div>
-          <h3>{t("members.threads")}</h3>
-          <ul className={styles.list} aria-label={t("members.threads")}>
+          {!roster && <h3>{t("members.threads")}</h3>}
+          <ul
+            className={styles.list}
+            aria-label={t("members.threads")}
+            hidden={roster}
+          >
             {detail?.threads.map((thread) => (
               <li key={`${thread.channel_id}:${thread.id}`}>
                 <button
@@ -333,6 +385,22 @@ export function Members({
                 />
               </label>
             </div>
+            {!roster && (
+              <Menu
+                label={t("members.bringIn")}
+                trigger={(props) => (
+                  <Button {...props} disabled={!absent.length}>
+                    {t("members.bringIn")}
+                  </Button>
+                )}
+                items={absent.map((c) => ({
+                  id: c.key,
+                  label: colleagueName(c, t),
+                  onSelect: () =>
+                    void action(() => joinColleague(team.workspace_id, c.key)),
+                }))}
+              />
+            )}
             <Button
               variant="primary"
               icon={Plus}
@@ -346,6 +414,7 @@ export function Members({
               .filter(
                 (m) =>
                   !m.deleted &&
+                  !(roster && m.role === "human") &&
                   memberName(m, t)
                     .toLocaleLowerCase()
                     .includes(query.toLocaleLowerCase()),
@@ -353,12 +422,7 @@ export function Members({
               .map((m) => (
                 <li key={m.id}>
                   <MemberAvatar member={m} />
-                  <Button
-                    variant="ghost"
-                    onClick={() =>
-                      go(settingsHash(team.workspace_id, `member:${m.id}`))
-                    }
-                  >
+                  <Button variant="ghost" onClick={() => go(place(m))}>
                     {memberName(m, t)}
                   </Button>
                   <span className={styles.summary}>{m.description ?? ""}</span>
@@ -418,12 +482,26 @@ export function Members({
                                 )
                               : setConfirm({ member: m, action: "disable" }),
                         },
+                        ...(!roster && m.builtin && m.role !== "advisor"
+                          ? [
+                              {
+                                id: "leave",
+                                label: t("members.leave"),
+                                onSelect: () =>
+                                  void action(() =>
+                                    deleteTeamMember(team.workspace_id, m.id),
+                                  ),
+                              },
+                            ]
+                          : []),
                         ...(!m.builtin
                           ? [
                               {
                                 id: "delete",
-                                label: t("members.delete"),
-                                danger: true,
+                                label: t(
+                                  roster ? "members.delete" : "members.leave",
+                                ),
+                                danger: roster,
                                 onSelect: () =>
                                   setConfirm({ member: m, action: "delete" }),
                               },

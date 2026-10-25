@@ -53,6 +53,7 @@ import { LocalOnly } from "../screens/research/LocalOnly";
 import { TeamScreen } from "../screens/research/TeamScreen";
 import { Inbox } from "../screens/research/Inbox";
 import { AllProjects } from "../screens/research/AllProjects";
+import { ColleaguesScreen } from "../screens/team/ColleaguesScreen";
 import { ResearchProject } from "../screens/research/ResearchProject";
 import { ScheduleCenter } from "../screens/schedules/ScheduleCenter";
 import { CustomizeScreen } from "../screens/customize/CustomizeScreen";
@@ -334,10 +335,14 @@ function App({ user, setUser }: { user: User; setUser: (user: null) => void }) {
             "research-collections",
             "schedules",
             "customize",
+            "colleagues",
           ].includes(shown.screen) &&
             local === false && <LocalOnly />}
           {shown.screen === "all-projects" && local !== false && (
             <AllProjects go={go} />
+          )}
+          {shown.screen === "colleagues" && local !== false && (
+            <ColleaguesScreen colleague={shown.colleague} go={go} />
           )}
           {shown.screen === "inbox" && local !== false && (
             <Inbox workspaceId={shown.workspaceId} go={go} />

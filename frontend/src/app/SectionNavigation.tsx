@@ -26,6 +26,7 @@ import {
 import { readSectionAddresses } from "./local-sections";
 import { useTeamWorkspace } from "../screens/research/TeamNavigation";
 import { useI18n } from "../i18n/I18nProvider";
+import { ColleagueNavigation } from "../screens/team/ColleagueNavigation";
 import { followLink, readerHash } from "../reader/route";
 import { SidebarItem, SidebarSection } from "../ui";
 import type { AppRoute } from "./routes";
@@ -85,6 +86,13 @@ export function SectionNavigation({
       onClick={followLink(go, path)}
     />
   );
+  if (section === "colleagues")
+    return (
+      <ColleagueNavigation
+        selected={route.screen === "colleagues" ? route.colleague : undefined}
+        go={go}
+      />
+    );
   if (section === "materials")
     return (
       <>

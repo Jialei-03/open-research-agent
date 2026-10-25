@@ -109,3 +109,4 @@ testpaths = ["backend/tests"]
 # Four processes: about a minute for the whole suite instead of six or seven.
 # `-n 0` runs it in one process (what the PostgreSQL tests need: one shared database).
 addopts = "-n 4"
+markers = ["roster: a new project starts with the default colleagues only"]

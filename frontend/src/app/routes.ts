@@ -59,6 +59,7 @@ export type AppRoute =
     }
   | { screen: "inbox"; workspaceId?: string; redirect?: string }
   | { screen: "all-projects"; redirect?: string }
+  | { screen: "colleagues"; colleague?: string; redirect?: string }
   | { screen: "open"; url: string; redirect?: string }
   | { screen: "reader"; reader: ReaderRoute; redirect?: string };
 
@@ -164,6 +165,13 @@ export function parseAppRoute(hash: string): AppRoute {
       : { screen: "new-research", redirect: "new" };
   }
   if (path === "all") return { screen: "all-projects" };
+  if (path === "colleagues") return { screen: "colleagues" };
+  if (path.startsWith("colleagues/")) {
+    const colleague = decodeURIComponent(path.slice("colleagues/".length));
+    return /^(?:[a-z]{1,20}|lib:[0-9a-f-]{36})$/.test(colleague)
+      ? { screen: "colleagues", colleague }
+      : { screen: "colleagues", redirect: "colleagues" };
+  }
   if (path === "inbox") {
     const workspaceId =
       new URLSearchParams(hash.split("?")[1] || "").get("workspace") || "";

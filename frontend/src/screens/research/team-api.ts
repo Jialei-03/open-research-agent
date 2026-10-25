@@ -171,6 +171,7 @@ export interface TeamMessage {
     also_channel?: boolean;
     thread_origin?: { thread_id: string; message_id: string };
     paused_member?: string;
+    joined?: boolean;
     reminder?: {
       message_id: string;
       channel_id: string;

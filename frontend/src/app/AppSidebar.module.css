@@ -267,14 +267,15 @@
 .researchSidebar[data-floating] .researchPane {
   position: fixed;
   z-index: 20;
-  top: var(--ui-space-8);
+  /* A card laid exactly over the page's own card: same top, bottom, left edge and corners. */
+  top: calc(var(--app-top, 0px) + var(--ui-space-8));
   bottom: var(--ui-space-8);
-  left: calc(var(--ui-rail-width) + var(--ui-space-8));
+  left: var(--ui-rail-width);
   width: min(
     var(--research-sidebar-width, var(--ui-sidebar-width)),
-    calc(100vw - calc(var(--ui-rail-width) + var(--ui-space-24)))
+    calc(100vw - calc(var(--ui-rail-width) + var(--ui-space-16)))
   );
-  border-radius: 0 var(--ui-r-12) var(--ui-r-12) 0;
+  border-radius: var(--ui-r-12);
   background: var(--ui-bg-1);
   box-shadow: var(--ui-elev-2);
 }

@@ -115,7 +115,24 @@ def description(member):
         + values["role_description"]
         + "\n\n"
         + shared_instructions(member)
+        + memory_part(member)
     )
+
+
+def memory_part(member):
+    """The colleague's own memory, the same in every project."""
+    from sqlalchemy.orm import object_session
+
+    from .agent_files import settings_of
+    from .models import ResearchWorkspace
+    from .team_memory import snapshot
+    from .team_roster import key_of
+
+    settings, d = settings_of(member), object_session(member)
+    workspace = d.get(ResearchWorkspace, member.workspace_id) if d else None
+    if settings is None or workspace is None or member.role == "human":
+        return ""
+    return "\n\n" + snapshot(settings, workspace.owner, key_of(member))
 
 
 def config(member):
@@ -353,6 +370,11 @@ def edit(d, workspace, member, body):
         select(TeamChannel).where(TeamChannel.member_id == member.id)
     ):
         channel.name = member.name
+    if body.config or body.source is not None or restore:
+        # One colleague, one definition: the same person in other projects follows.
+        from .team_roster import spread
+
+        spread(d, workspace, member)
     if not member.enabled:
         for row in d.scalars(
             select(TeamDelivery).where(

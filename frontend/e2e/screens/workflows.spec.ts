@@ -182,20 +182,18 @@ test("workflows: selection, output preview, progress and confirmation", async ({
   await mockTeam(page, { researches: () => [project] });
   await signIn(page);
   await page.goto("/#new");
-  await page.getByRole("button", { name: "工作流", exact: true }).click();
-  await page.getByRole("menuitem", { name: "文献综述", exact: true }).click();
+  // No picker to fill in first: "/" names the way a task is done.
+  const field = page.locator('[data-testid="new-research"] textarea');
+  await field.fill("/文献");
   await page
-    .locator('[data-testid="new-research"] textarea')
-    .fill("Review papers");
-  await page
-    .locator('[data-testid="new-research"] button[type="submit"]')
+    .getByTestId("slash-menu")
+    .getByRole("option", { name: /\/文献综述/ })
     .click();
-  await expect(page).toHaveURL(
-    (url) => url.hash === `#${teamHash(wid, experiments, `research:${rid}`)}`,
-  );
-  await expect(
-    page.getByRole("region", { name: "线程", exact: true }),
-  ).toBeVisible();
+  await expect(field).toHaveValue("/文献综述 ");
+  await field.press("End");
+  await field.pressSequentially("Review papers");
+  await field.press("Enter");
+  await expect(page).toHaveURL((url) => url.hash === `#research/${rid}`);
   expect(selected).toBe("literature-review");
   await page
     .getByRole("button", { name: "review/sources.md", exact: true })

@@ -51,7 +51,15 @@ import { api } from "../../api";
 import { AppActions } from "../../app/AppSidebar";
 import { useI18n } from "../../i18n/I18nProvider";
 import type { MessageKey, PluralBase } from "../../i18n/i18n";
-import { Button, Dialog, IconButton, Menu, TextField, toast } from "../../ui";
+import {
+  Button,
+  Dialog,
+  IconButton,
+  Menu,
+  TextField,
+  toast,
+  useSlashCommands,
+} from "../../ui";
 import { readModels, type ModelRow } from "../setup/model-api";
 import { useModelRevision } from "../setup/useModelRevision";
 import { AddModelButton, openModelSetup } from "../setup/ModelSetup";
@@ -79,6 +87,11 @@ import {
 } from "./TeamMessageFeatures";
 import { TeamFileCard, TeamSidePanel } from "./TeamSidePanel";
 import { startProject } from "./research-api";
+import {
+  readWorkflows,
+  workflowName,
+  type Workflow,
+} from "../workflows/workflows-api";
 import { useResearchNavigation } from "./ResearchNavigation";
 import { MemberStatus, useTeam } from "./TeamNavigation";
 import {
@@ -1036,7 +1049,8 @@ const systemMessage = (message: TeamMessage) =>
   ["budget", "relay_limit", "accepted", "changes_requested"].includes(
     message.kind,
   ) ||
-  (!message.author_id && message.kind !== "research");
+  (!message.author_id && message.kind !== "research") ||
+  !!message.data.joined;
 
 const emptyReply = (message: TeamMessage) =>
   message.run?.status === "completed" &&
@@ -1253,17 +1267,21 @@ export function MessageRow({
         tabIndex={-1}
       >
         <span>
-          {message.kind === "member_paused"
-            ? t("team.memberPaused", {
-                name: memberLabel(
-                  team.members.find((m) => m.id === message.data.paused_member),
-                  t,
-                ),
-              })
-            : message.kind === "accepted" ||
-                message.kind === "changes_requested"
-              ? `${t(message.kind === "accepted" ? "team.accepted" : "team.changesRequested")}${message.text ? ` · ${message.text}` : ""}`
-              : systemText}
+          {message.data.joined
+            ? t("team.joined", { name: memberLabel(member, t) })
+            : message.kind === "member_paused"
+              ? t("team.memberPaused", {
+                  name: memberLabel(
+                    team.members.find(
+                      (m) => m.id === message.data.paused_member,
+                    ),
+                    t,
+                  ),
+                })
+              : message.kind === "accepted" ||
+                  message.kind === "changes_requested"
+                ? `${t(message.kind === "accepted" ? "team.accepted" : "team.changesRequested")}${message.text ? ` · ${message.text}` : ""}`
+                : systemText}
         </span>
         <div className={styles.hoverActions}>
           <MessageMoreMenu message={message} team={team} />
@@ -1817,6 +1835,47 @@ export function TeamComposer({
       /* Optional draft. */
     }
   };
+  // "/" names a workflow: the task after it starts a research done that way, in this project.
+  const { data: navigation } = useResearchNavigation();
+  const personal =
+    navigation.workspaces.find((w) => w.id === team.workspace_id)?.kind ===
+    "personal";
+  const [workflows, setWorkflows] = useState<Workflow[]>([]);
+  useEffect(() => {
+    if (personal) return;
+    let stale = false;
+    readWorkflows(team.workspace_id).then(
+      (value) => !stale && setWorkflows(value),
+      () => undefined,
+    );
+    return () => {
+      stale = true;
+    };
+  }, [team.workspace_id, personal]);
+  const slash = useSlashCommands({
+    value: text,
+    onChange: change,
+    commands: workflows.map((item) => ({
+      name: workflowName(item, t),
+      description: (item.steps ?? []).map((step) => step.name).join(" → "),
+      group: "workflow",
+      takesArgument: true,
+      run: async (task: string) => {
+        if (!task.trim()) return;
+        try {
+          const research = await startProject({
+            workspace_id: team.workspace_id,
+            model_config_id: model,
+            message: task.trim(),
+            workflow_id: item.id,
+          });
+          window.location.hash = `#research/${research.id}`;
+        } catch (reason) {
+          toast.show({ message: String(reason), tone: "error" });
+        }
+      },
+    })),
+  });
   const complete = (member: TeamMember) => {
     if (!query) return;
     const insert = `@${name(member)} `;
@@ -1831,6 +1890,7 @@ export function TeamComposer({
     });
   };
   const submit = async (mode: "queue" | "immediate" | "record") => {
+    if (slash.submit()) return;
     if ((!text.trim() && !quote) || busy) return;
     if (needsModel && mode !== "record") {
       openModelSetup();
@@ -1950,6 +2010,7 @@ export function TeamComposer({
           />
         </span>
       ))}
+      {slash.menu}
       <textarea
         ref={field}
         rows={2}
@@ -1972,6 +2033,7 @@ export function TeamComposer({
         }}
         onKeyDown={(e) => {
           if (e.nativeEvent.isComposing) return;
+          if (slash.onKeyDown(e)) return;
           if (matches.length) {
             if (e.key === "Escape") {
               e.preventDefault();

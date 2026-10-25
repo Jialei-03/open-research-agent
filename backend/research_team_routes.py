@@ -35,6 +35,15 @@ class MessageInput(Strict):
     also_channel: bool = False
 
 
+class MemoryInput(Strict):
+    target: Literal["memory", "user"]
+    entries: list[str] = Field(default_factory=list, max_length=100)
+
+
+class JoinInput(Strict):
+    key: str = Field(min_length=1, max_length=80)
+
+
 class HireInput(Strict):
     description: str = Field(min_length=1, max_length=2000)
     model_config_id: str = Field(default="", max_length=64)
@@ -262,6 +271,49 @@ def install_team_routes(app, settings, db, auth, workspace_of):
         d.commit()
         return result
 
+    @app.post(base + "/members/join")
+    def join_member(id: str, body: JoinInput, a=Depends(auth), d=Depends(db)):
+        from .team_roster import join
+
+        workspace = editable_workspace(d, id, a)
+        team.ensure(d, workspace)
+        try:
+            member = join(d, workspace, body.key)
+        except ValueError as error:
+            raise HTTPException(422, str(error)) from None
+        d.commit()
+        return {"id": member.id}
+
+    @app.get("/api/v1/research/colleagues/{key}/memory")
+    def colleague_memory(key: str, a=Depends(auth), d=Depends(db)):
+        from .team_memory import LIMITS, read
+        from .team_roster import colleagues
+
+        if key not in {c["key"] for c in colleagues(d, a["id"])}:
+            raise HTTPException(404, "没有这位同事 / Unknown colleague")
+        return {"entries": read(settings, a["id"], key), "limits": LIMITS}
+
+    @app.put("/api/v1/research/colleagues/{key}/memory")
+    def save_colleague_memory(
+        key: str, body: MemoryInput, a=Depends(auth), d=Depends(db)
+    ):
+        from .team_memory import LIMITS, read, write
+        from .team_roster import colleagues
+
+        if key not in {c["key"] for c in colleagues(d, a["id"])}:
+            raise HTTPException(404, "没有这位同事 / Unknown colleague")
+        try:
+            write(settings, a["id"], key, body.target, body.entries)
+        except ValueError as error:
+            raise HTTPException(422, str(error)) from None
+        return {"entries": read(settings, a["id"], key), "limits": LIMITS}
+
+    @app.get("/api/v1/research/colleagues")
+    def list_colleagues(a=Depends(auth), d=Depends(db)):
+        from .team_roster import roster_out
+
+        return roster_out(d, a["id"])
+
     @app.post(base + "/members/draft")
     def draft_member(id: str, body: HireInput, a=Depends(auth), d=Depends(db)):
         from . import team_hire
@@ -309,12 +361,16 @@ def install_team_routes(app, settings, db, auth, workspace_of):
         workspace = editable_workspace(d, id, a)
         try:
             member = members.owned(d, workspace, member_id)
+            # Removing a colleague takes them out of this project; they stay on the roster.
             if member.role in team.ROLES:
-                raise ValueError(
-                    "内置成员不可删除 / Built-in members cannot be deleted"
+                from .team_roster import leave
+
+                leave(d, workspace, member)
+            else:
+                members.edit(
+                    d, workspace, member, members.MemberEdit(enabled=False)
                 )
-            members.edit(d, workspace, member, members.MemberEdit(enabled=False))
-            member.deleted = True
+                member.deleted = True
         except ValueError as error:
             raise HTTPException(422, str(error)) from None
         d.commit()

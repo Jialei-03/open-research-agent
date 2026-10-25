@@ -3,8 +3,10 @@ export const PLACES = {
   rail: [
     "collapse",
     "all-projects",
+    "personal",
     "project",
     "add-project",
+    "colleagues",
     "materials",
     "tasks",
     "customize",
@@ -42,6 +44,7 @@ export const PLACES = {
   recent: ["recent", "recent-paper", "recent-more", "recent-less"],
   customize: ["playbook", "roles", "workflows"],
   tasks: ["new-task", "task"],
+  colleagues: ["hire", "colleague"],
 } as const;
 
 export type SidebarPlace = keyof typeof PLACES;

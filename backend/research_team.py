@@ -108,7 +108,12 @@ def ensure(d, workspace):
         d.scalars(select(TeamMember).where(TeamMember.workspace_id == workspace.id))
     )
     if not members:
+        from .team_roster import DEFAULT
+
+        # A new project starts with the researcher and the advisor; others join when called on.
         for role, names in ROLES.items():
+            if role != "human" and role not in DEFAULT:
+                continue
             member = TeamMember(
                 id=stable(workspace, role),
                 workspace_id=workspace.id,
@@ -282,6 +287,33 @@ def mentions(d, workspace, text):
         ]
         if positions:
             found.append((min(positions), member.id))
+    # Naming a colleague who is not in the project brings them in.
+    from .team_roster import colleagues, join, key_of
+
+    present = {
+        key_of(m)
+        for m in d.scalars(
+            select(TeamMember).where(TeamMember.workspace_id == workspace.id)
+        )
+        if not m.deleted
+    }
+    for colleague in colleagues(d, workspace.owner):
+        if colleague["key"] in present:
+            continue
+        names = {colleague["name"], *ROLES.get(colleague["role"] or "", ())}
+        if colleague["role"]:
+            names.add(colleague["role"])
+        positions = [
+            match.start()
+            for name in names
+            if (
+                match := re.search(
+                    r"@" + re.escape(name) + r"(?![\w-])", text, re.IGNORECASE
+                )
+            )
+        ]
+        if positions:
+            found.append((min(positions), join(d, workspace, colleague["key"]).id))
     return [identifier for _, identifier in sorted(found)]
 
 

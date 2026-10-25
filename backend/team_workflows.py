@@ -25,6 +25,9 @@ from .models import (
 
 
 def references(d, workspace):
+    present = list(
+        d.scalars(select(TeamMember).where(TeamMember.workspace_id == workspace.id))
+    )
     members = [
         {
             "id": m.id,
@@ -35,10 +38,12 @@ def references(d, workspace):
             "paused": m.paused,
             "subscriptions": m.subscriptions,
         }
-        for m in d.scalars(
-            select(TeamMember).where(TeamMember.workspace_id == workspace.id)
-        )
+        for m in present
     ]
+    # Colleagues not yet in the project can still be named; they join when called on.
+    from .team_roster import absent
+
+    members += absent(d, workspace, present)
     channels = [
         {"id": c.id, "name": c.name, "kind": "dm" if c.member_id else "channel"}
         for c in d.scalars(
@@ -359,6 +364,13 @@ def unstarted(d, message):
 
 
 def apply(d, workspace, message, flow, actions):
+    from .team_roster import call_on
+
+    call_on(
+        d,
+        workspace,
+        [a["member"] for a in actions if a["action"] in {"wake", "review"}],
+    )
     for action in actions:
         metadata = provenance(flow, action)
         if action["action"] in {"wake", "review"}:
@@ -757,6 +769,13 @@ def research_event(
         state["routed_source"] = source
     project.workflow_state = state
     if workspace and actions:
+        from .team_roster import call_on
+
+        call_on(
+            d,
+            workspace,
+            [a["member"] for a in actions if a["action"] in {"wake", "review"}],
+        )
         for action in actions:
             if action["action"] in {"post", "wait_for_owner", "limit", "skip"}:
                 waiting = action["action"] == "wait_for_owner"

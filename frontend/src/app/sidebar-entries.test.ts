@@ -19,8 +19,10 @@ describe("sidebar entry registry", () => {
     expect(PLACES.rail).toEqual([
       "collapse",
       "all-projects",
+      "personal",
       "project",
       "add-project",
+      "colleagues",
       "materials",
       "tasks",
       "customize",

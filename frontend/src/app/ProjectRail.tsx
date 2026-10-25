@@ -1,5 +1,5 @@
-import { LayoutGrid, Plus } from "lucide-react";
-import { useState } from "react";
+import { LayoutGrid, Plus, User } from "lucide-react";
+import { Fragment, useState } from "react";
 import { useI18n } from "../i18n/I18nProvider";
 import { followLink } from "../reader/route";
 import { Tooltip } from "../ui";
@@ -42,6 +42,8 @@ export function ProjectRail({
   );
   const waiting = needsYou(data, messages);
   const all = section === "research" && hash.split("?")[0] === "all";
+  // The personal space, where every colleague is, sits apart above the projects.
+  const personal = open.find((w) => w.kind === "personal");
   return (
     <div className={styles.projectRail}>
       <Tooltip
@@ -60,8 +62,11 @@ export function ProjectRail({
           <LayoutGrid size={18} aria-hidden />
         </a>
       </Tooltip>
-      <span className={styles.railDivider} />
-      {open.map((w) => {
+      {[
+        ...(personal ? [personal] : []),
+        ...open.filter((w) => w !== personal),
+      ].map((w) => {
+        const own = w === personal;
         const count = waiting.filter(
           (item) => item.workspaceId === w.id,
         ).length;
@@ -79,40 +84,48 @@ export function ProjectRail({
           parseAppRoute(restore).screen !== "all-projects"
             ? restore
             : teamHash(w.id);
+        const name = own ? t("personal.title") : w.name;
         return (
-          <Tooltip
-            key={w.id}
-            content={w.name}
-            placement={{ side: "right", align: "center" }}
-          >
-            <a
-              className={styles.projectTile}
-              data-id={sidebarId("project")}
-              href={`#${teamHash(w.id)}`}
-              aria-label={w.name}
-              aria-current={active ? "page" : undefined}
-              onClick={followLink(go, target)}
+          <Fragment key={w.id}>
+            <Tooltip
+              content={name}
+              placement={{ side: "right", align: "center" }}
             >
-              {Array.from(w.name.trim())[0] || "·"}
-              {count > 0 && (
-                <span
-                  className={styles.tileCount}
-                  aria-label={tn("inbox.badge", count)}
-                >
-                  {count}
-                </span>
-              )}
-              {working && (
-                <span
-                  className={styles.tileWorking}
-                  role="img"
-                  aria-label={t("research.status.running")}
-                />
-              )}
-            </a>
-          </Tooltip>
+              <a
+                className={styles.projectTile}
+                data-id={sidebarId(own ? "personal" : "project")}
+                href={`#${teamHash(w.id)}`}
+                aria-label={name}
+                aria-current={active ? "page" : undefined}
+                onClick={followLink(go, target)}
+              >
+                {own ? (
+                  <User size={18} aria-hidden />
+                ) : (
+                  Array.from(w.name.trim())[0] || "·"
+                )}
+                {count > 0 && (
+                  <span
+                    className={styles.tileCount}
+                    aria-label={tn("inbox.badge", count)}
+                  >
+                    {count}
+                  </span>
+                )}
+                {working && (
+                  <span
+                    className={styles.tileWorking}
+                    role="img"
+                    aria-label={t("research.status.running")}
+                  />
+                )}
+              </a>
+            </Tooltip>
+            {own && <span className={styles.railDivider} />}
+          </Fragment>
         );
       })}
+      {!personal && <span className={styles.railDivider} />}
       <Tooltip
         content={t("workspace.add")}
         placement={{ side: "right", align: "center" }}

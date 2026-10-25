@@ -267,6 +267,9 @@ async function ready(page: Page, data: SmokeData) {
     case "projects":
       title = "冒烟成员";
       break;
+    case "colleagues":
+      title = zh["app.section.colleagues"];
+      break;
     case "reader":
       title = data.paper.title;
       await expect(
@@ -1191,7 +1194,7 @@ test("侧栏入口登记表、待你决定、分页和固定 rail", async ({ pag
     "aria-current",
     "page",
   );
-  await expect(nav.locator('[data-id="all-project"]')).toHaveCount(2);
+  await expect(nav.locator('[data-id="all-project"]')).toHaveCount(3);
   await expect(nav.locator('[data-id="all-row"]')).toHaveCount(8);
   await collect("all");
   await collect("research");
@@ -1273,6 +1276,11 @@ test("侧栏入口登记表、待你决定、分页和固定 rail", async ({ pag
   await visit(page, smoke, "schedules");
   await expect(nav.locator('[data-id="task"]')).toHaveCount(1);
   await collect("tasks");
+  await assertRail();
+  // Colleagues: hire first, then everyone from the personal space.
+  await visit(page, smoke, "colleagues");
+  await expect(nav.locator('[data-id="colleague"]').first()).toBeVisible();
+  await collect("colleagues");
   await assertRail();
 
   // The hosted edition keeps its sign-out action at the foot of the sidebar.

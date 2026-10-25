@@ -13,6 +13,7 @@ import {
   Plus,
   SlidersHorizontal,
   type LucideIcon,
+  Users,
 } from "lucide-react";
 import {
   createContext,
@@ -362,6 +363,7 @@ function AppResearchSidebar({
     remembered.current[key] ||
     {
       research: newResearchHash,
+      colleagues: "colleagues",
       materials: "library",
       tasks: "schedules",
       customize: "customize/playbook",
@@ -459,6 +461,13 @@ function AppResearchSidebar({
             restore={remembered.current.research}
             go={choose}
           />
+          {railLink(
+            "colleagues",
+            Users,
+            t("app.section.colleagues"),
+            destination("colleagues"),
+            section === "colleagues",
+          )}
           {railLink(
             "materials",
             Library,

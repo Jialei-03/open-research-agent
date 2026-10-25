@@ -149,7 +149,11 @@ for (const theme of ["light", "dark"] as const) {
         "10px 10px 10px 12px",
       );
       await expect(home.locator("form")).toHaveCSS("gap", "0px");
-      for (const name of ["附加文件", "选择项目", "添加模型", "工作流"]) {
+      // Workflows are named with "/" in the text, not picked beforehand.
+      await expect(
+        home.getByRole("button", { name: "工作流", exact: true }),
+      ).toHaveCount(0);
+      for (const name of ["附加文件", "选择项目", "添加模型"]) {
         await expect(
           home.getByRole("button", { name, exact: true }),
         ).toBeVisible();
@@ -167,7 +171,7 @@ for (const theme of ["light", "dark"] as const) {
       });
       await expect(attach).toHaveCSS("width", "32px");
       await expect(attach).toHaveCSS("height", "32px");
-      for (const name of ["选择项目", "工作流"]) {
+      for (const name of ["选择项目"]) {
         const chip = home.getByRole("button", { name, exact: true });
         await expect(chip).toHaveCSS("height", "32px");
         await expect(chip).toHaveCSS("font-size", "13px");

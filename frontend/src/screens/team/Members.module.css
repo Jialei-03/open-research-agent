@@ -226,3 +226,90 @@ fieldset.field legend {
   composes: search from "../Management.module.css";
   width: 100%;
 }
+
+.projectRow {
+  display: flex;
+  align-items: center;
+  gap: var(--ui-space-8);
+  min-height: var(--ui-control-md);
+  font-size: var(--ui-text-14);
+}
+
+.projectRow a {
+  color: var(--ui-fg);
+  text-decoration: none;
+}
+
+.projectRow a:hover {
+  text-decoration: underline;
+}
+
+.projectRow span:last-child {
+  margin-left: auto;
+  color: var(--ui-fg-2);
+  font-size: var(--ui-text-13);
+}
+
+.memoryHead {
+  display: flex;
+  align-items: baseline;
+  gap: var(--ui-space-8);
+}
+
+.memoryHead span {
+  color: var(--ui-fg-3);
+  font-size: var(--ui-text-12);
+  font-weight: var(--ui-weight-normal);
+}
+
+.memory {
+  display: grid;
+  gap: var(--ui-space-4);
+  margin: 0 0 var(--ui-space-8);
+  padding: 0;
+  list-style: none;
+}
+
+.memory li {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--ui-space-8);
+  padding: var(--ui-space-6) var(--ui-space-8) var(--ui-space-6)
+    var(--ui-space-12);
+  border-radius: var(--ui-r-8);
+  background: var(--ui-fill);
+  font-size: var(--ui-text-14);
+  line-height: var(--ui-leading);
+}
+
+.memory li span {
+  flex: 1;
+  padding-top: 3px;
+}
+
+.memoryAdd {
+  display: flex;
+  align-items: center;
+  gap: var(--ui-space-4);
+  height: var(--ui-control-md);
+  margin-bottom: var(--ui-space-16);
+  padding: 0 var(--ui-space-4) 0 var(--ui-space-12);
+  border-radius: var(--ui-r-10);
+  background: var(--ui-bg);
+  box-shadow: var(--ui-elev-1);
+}
+
+.memoryAdd:focus-within {
+  box-shadow: 0 0 0 1.5px var(--ui-edge-strong);
+}
+
+.memoryAdd input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  color: var(--ui-fg);
+  font: inherit;
+  font-size: var(--ui-text-14);
+  outline: none;
+}
