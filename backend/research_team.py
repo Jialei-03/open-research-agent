@@ -1322,7 +1322,11 @@ def dispatch(settings, d, workspace, delivery):
         + feedback_part(d, member),
         attachment_ids=list(dict.fromkeys(attachment_ids)),
         lane="research",
-        runtime={"team": team, **snapshot(member)},
+        runtime={
+            "team": team,
+            **snapshot(member),
+            **effort_options(member),
+        },
     )
     d.add(run)
     d.flush()
@@ -1845,3 +1849,11 @@ def comparison_members(d, projects):
             if counts[m.id] or tokens[m.id]
         ]
     return result
+
+
+def effort_options(member):
+    """A colleague's chosen thinking strength travels with each of their runs."""
+    from .agent_files import read_member
+
+    effort = read_member(member)[1].get("reasoning_effort", "default")
+    return {"model_options": {"reasoning_effort": effort}} if effort != "default" else {}

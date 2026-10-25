@@ -46,6 +46,8 @@ import {
   useId,
   useRef,
   useState,
+  type CSSProperties,
+  type ReactNode,
 } from "react";
 import { api } from "../../api";
 import { AppActions } from "../../app/AppSidebar";
@@ -73,7 +75,11 @@ import { GroupAvatar } from "./GroupAvatar";
 import { TeamRightPanel, WATCH_EVENT, type PanelTab } from "./TeamRightPanel";
 import { TeamInbox } from "./TeamActivity";
 import { TeamWorkScreen } from "./TeamWork";
-import { TeamMemberCard, ColleagueStatus } from "./TeamMemberCard";
+import {
+  ColleagueStatus,
+  TeamMemberCard,
+  colleagueTask,
+} from "./TeamMemberCard";
 import { TeamCatchup, catchupAnchor } from "./TeamCatchup";
 import { TeamMessageChanges } from "./TeamMessageChanges";
 import { TeamMessageDecision } from "./TeamMessageDecision";
@@ -521,6 +527,12 @@ export function TeamScreen({
           onExpand={setPanelExpanded}
           onClose={() => togglePanel(false)}
           onMember={(member) => {
+            // A colleague at work: watch the work. Otherwise talk to them.
+            if (member.status === "working" || member.status === "queued") {
+              setWatching(`member:${member.id}`);
+              setPanelTab("watch");
+              return;
+            }
             const dm = team.channels.find((c) => c.member_id === member.id);
             if (dm) go(teamHash(id, dm.id));
           }}
@@ -1128,21 +1140,28 @@ function MessageRun({
         {t(`team.task.${run.status}` as MessageKey) || run.status}
       </span>
       <span className={styles.taskTime}>{shortDuration(seconds, t)}</span>
-      {run.status === "running" && (
-        <Button
-          size="sm"
-          variant="secondary"
-          icon={Eye}
-          onClick={() =>
-            window.dispatchEvent(
-              new CustomEvent(WATCH_EVENT, { detail: message.id }),
-            )
-          }
-        >
-          {t("team.watch")}
-        </Button>
-      )}
     </div>
+  );
+  const live = run.status === "running" || run.status === "queued";
+  // While the work goes on the card is one line; the whole trail is in the watch panel.
+  const watchLine = (
+    <button
+      type="button"
+      className={styles.liveLine}
+      onClick={() =>
+        window.dispatchEvent(
+          new CustomEvent(WATCH_EVENT, { detail: message.id }),
+        )
+      }
+    >
+      <Eye size={14} aria-hidden />
+      <span>
+        {run.status === "queued"
+          ? t("team.task.queued")
+          : colleagueTask(run.steps[run.steps.length - 1], t)}
+      </span>
+      <span className={styles.liveMore}>{t("team.watch")}</span>
+    </button>
   );
   // Reuse the process summary and trail, keeping the answer outside the fold.
   if (run.steps.length)
@@ -1152,21 +1171,8 @@ function MessageRun({
         data-live={run.status === "running" || undefined}
       >
         {head}
-        {run.status === "running" ? (
-          <Button
-            variant="ghost"
-            size="sm"
-            icon={ChevronRight}
-            aria-expanded={open}
-            onClick={() => setOpen(!open)}
-          >
-            {[
-              t("team.status.working"),
-              ...summary(run.steps).map(([kind, n]) =>
-                tn(`research.process.sum.${kind}` as PluralBase, n),
-              ),
-            ].join(" · ")}
-          </Button>
+        {live ? (
+          watchLine
         ) : (
           <SummaryLine
             steps={run.steps}
@@ -1175,11 +1181,20 @@ function MessageRun({
             onToggle={() => setOpen(!open)}
           />
         )}
-        {open && <Trail steps={run.steps} live={run.status === "running"} />}
+        {open && !live && <Trail steps={run.steps} live={false} />}
         {(final || (run.status === "running" && run.response)) && (
-          <Prose text={final || run.response} />
+          <LongText>
+            <Prose text={final || run.response} />
+          </LongText>
         )}
         {run.status === "failed" && error && <p role="alert">{error}</p>}
+      </section>
+    );
+  if (live)
+    return (
+      <section className={styles.run} data-live>
+        {head}
+        {watchLine}
       </section>
     );
   return (
@@ -1409,7 +1424,9 @@ export function MessageRow({
             ) : message.run ? (
               <MessageRun message={message} member={member} name={name} />
             ) : (
-              <Prose text={message.text} />
+              <LongText>
+                <Prose text={message.text} />
+              </LongText>
             )}
           </QuoteSelection>
           {(message.run?.runtime?.time_limit_reached ||
@@ -2181,3 +2198,45 @@ export function TeamComposer({
     </form>
   );
 }
+
+/** A long message shows its start; the rest opens on request. */
+function LongText({ children }: { children: ReactNode }) {
+  const { t } = useI18n();
+  const box = useRef<HTMLDivElement>(null);
+  const [long, setLong] = useState(false);
+  const [open, setOpen] = useState(false);
+  useEffect(() => {
+    const element = box.current;
+    if (!element) return;
+    const measure = () => setLong(element.scrollHeight > LONG_TEXT + 80);
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
+  return (
+    <>
+      <div
+        ref={box}
+        className={styles.longText}
+        data-clamped={long && !open ? "" : undefined}
+        style={{ "--long-text": `${LONG_TEXT}px` } as CSSProperties}
+      >
+        {children}
+      </div>
+      {long && (
+        <button
+          type="button"
+          className={styles.longToggle}
+          aria-expanded={open}
+          onClick={() => setOpen(!open)}
+        >
+          {t(open ? "team.collapse" : "team.expand")}
+        </button>
+      )}
+    </>
+  );
+}
+
+/** How tall a message is before it folds, in pixels. */
+const LONG_TEXT = 280;

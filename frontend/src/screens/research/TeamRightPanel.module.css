@@ -406,3 +406,13 @@
     width: 100%;
   }
 }
+
+a.taskRow {
+  border-radius: var(--ui-r-8);
+  color: inherit;
+  text-decoration: none;
+}
+
+a.taskRow:hover {
+  background: var(--ui-hover);
+}

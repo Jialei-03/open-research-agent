@@ -16,6 +16,7 @@ THIS = {"id": "host", "name": "本机", "kind": "host", "gpus": "", "concurrency
 # How many experiments one machine runs at once; more wait their turn, so
 # their timings are not skewed by sharing its GPU.
 CONCURRENCY_MAX = 8
+AGENTS_DEFAULT, AGENTS_MAX = 4, 16
 # This machine's Docker. No longer offered by default: kept so the projects
 # and jobs that ran in it still find it.
 LOCAL = {
@@ -44,7 +45,22 @@ def default():
         "default_compute": "host",
         "tracker": {"kind": "none", "project": "open-research-agent", "mode": "local"},
         "states": {},
+        "agents_at_once": AGENTS_DEFAULT,
     }
+
+
+def agents_at_once(settings):
+    try:
+        return load(settings)["agents_at_once"]
+    except (AttributeError, TypeError, OSError, ValueError):
+        return AGENTS_DEFAULT
+
+
+def _agents(value):
+    try:
+        return max(1, min(AGENTS_MAX, int(value)))
+    except (TypeError, ValueError):
+        return AGENTS_DEFAULT
 
 
 def load(settings):
@@ -64,6 +80,7 @@ def load(settings):
         "tracker": {**base["tracker"], **(data.get("tracker") or {})},
         # What checking each environment found (research_environment).
         "states": data.get("states") or {},
+        "agents_at_once": _agents(data.get("agents_at_once", AGENTS_DEFAULT)),
     }
 
 
@@ -224,6 +241,7 @@ def update(settings, body):
         "default_compute": default_compute,
         "tracker": tracker,
         "states": {k: v for k, v in old["states"].items() if k in ids},
+        "agents_at_once": _agents(body.get("agents_at_once", old["agents_at_once"])),
     }
     save(settings, data)
     return data

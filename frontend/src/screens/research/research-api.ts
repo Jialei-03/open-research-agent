@@ -347,6 +347,8 @@ export interface ResearchSettings {
   datasets?: { name: string; title: string }[];
   /** What checking each environment found (backend research_environment.py). */
   states: Record<string, EnvState>;
+  /** How many colleagues work at the same time. */
+  agents_at_once?: number;
 }
 
 export interface EnvState {

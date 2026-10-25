@@ -24,6 +24,8 @@ from sqlalchemy.orm import object_session
 
 from .builtin_agent_versions import BUILTIN_HASHES
 
+from .model_options import EFFORTS
+
 GROUPS = ("literature", "files", "shell", "experiments", "web", "project")
 COLORS = ("blue", "green", "amber", "red", "violet", "slate")
 BUILTINS = Path(__file__).parent / "agents"
@@ -90,6 +92,8 @@ def parse(source, role="custom"):
         or name.endswith((".", " "))
     ):
         fail("name", "名字无效 / Invalid name")
+    if header.get("effort", "default") not in EFFORTS:
+        fail("effort", "思考强度无效 / Invalid effort")
     for key in ("description", "model", "color", "avatar"):
         if key in header and not isinstance(header[key], str):
             fail(key, f"{key} 必须是文字 / Must be text")
@@ -153,6 +157,7 @@ def parse(source, role="custom"):
         "max_tokens": budget.get("total_tokens", 0),
         "channels": list(header.get("channels", [])),
         "enabled": header.get("enabled", True),
+        "reasoning_effort": header.get("effort", "default"),
     }
 
 
@@ -183,6 +188,11 @@ def render(config, source="", role="custom"):
             values["avatar"] = config["avatar"]
         else:
             header.pop("avatar", None)
+    # How hard the colleague thinks; the model's own default unless chosen.
+    if config.get("reasoning_effort", "default") != "default":
+        header["effort"] = config["reasoning_effort"]
+    else:
+        header.pop("effort", None)
     p = config.get("permissions", {})
     tools = config.get("tools")
     if tools is None:

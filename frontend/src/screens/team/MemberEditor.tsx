@@ -127,6 +127,7 @@ export function MemberFields({
 }) {
   const { t } = useI18n();
   const modelId = useId();
+  const effortId = useId();
   const uploadId = useId();
   const upload = useRef<HTMLInputElement>(null);
   const set = (patch: Partial<MemberConfig>) =>
@@ -218,6 +219,27 @@ export function MemberFields({
               {m.name || m.model}
             </option>
           ))}
+        </select>
+      </div>
+      <div className={styles.field}>
+        <label htmlFor={effortId}>{t("reader.assistant.effort.menu")}</label>
+        <select
+          id={effortId}
+          value={draft.reasoning_effort ?? "default"}
+          onChange={(e) =>
+            set({
+              reasoning_effort: e.target
+                .value as MemberConfig["reasoning_effort"],
+            })
+          }
+        >
+          {(["default", "low", "medium", "high", "xhigh", "max"] as const).map(
+            (level) => (
+              <option key={level} value={level}>
+                {t(`reader.assistant.effort.${level}`)}
+              </option>
+            ),
+          )}
         </select>
       </div>
       <fieldset className={styles.checks}>

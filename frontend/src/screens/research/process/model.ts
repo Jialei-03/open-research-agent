@@ -134,7 +134,7 @@ export function summary(steps: RunStep[]): [Kind, number][] {
   return order.filter((k) => counts.has(k)).map((k) => [k, counts.get(k)!]);
 }
 
-const argsOf = (step: RunStep): Record<string, unknown> => {
+export const argsOf = (step: RunStep): Record<string, unknown> => {
   if (typeof step.arguments === "string") {
     try {
       return JSON.parse(step.arguments) as Record<string, unknown>;

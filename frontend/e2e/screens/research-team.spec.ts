@@ -127,7 +127,8 @@ for (const [locale, theme, width] of [
     await expect(card).toBeVisible();
     await expect(card).toContainText(
       t("team.colleague.working", {
-        task: `${t("team.colleague.run")} python train.py`,
+        // The kind of work, not the command line.
+        task: t("team.colleague.run"),
         elapsed: t("reader.assistant.duration.minutes", {
           minutes: 1,
           seconds: 12,
@@ -195,7 +196,9 @@ for (const [locale, theme, width] of [
     await page.evaluate(() =>
       window.dispatchEvent(new Event("research-team-updated")),
     );
-    await expect(header).toContainText("python train.py");
+    // Without a status of their own, the step names the kind of work only.
+    await expect(header).toContainText(t("team.colleague.run"));
+    await expect(header).not.toContainText("python train.py");
     member.active_model = "";
     member.status = "idle";
     await page.evaluate(() =>

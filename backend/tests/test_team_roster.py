@@ -249,6 +249,86 @@ def test_the_personal_space_has_everyone_from_the_start(world):
         "writer",
         "distiller",
     }
+    from backend.agent_files import workspace_instructions
+    from backend.models import ResearchWorkspace
+
+    with app.state.maker() as d:
+        note = workspace_instructions(d.get(ResearchWorkspace, spaces[0]["id"]))
+        assert "not a project" in note and "do not browse" in note
     # Opening it again does not make another.
     again = a.get("/api/v1/research/navigation").json()
     assert sum(w["kind"] == "personal" for w in again["workspaces"]) == 1
+
+
+def test_how_many_colleagues_work_at_once_is_the_researchers_choice(tmp_path):
+    from types import SimpleNamespace
+
+    from backend import research_settings
+
+    settings = SimpleNamespace(storage=str(tmp_path / "files"))
+    assert research_settings.agents_at_once(settings) == 4
+    research_settings.update(settings, {"agents_at_once": 9})
+    assert research_settings.agents_at_once(settings) == 9
+    research_settings.update(settings, {"agents_at_once": 99})
+    assert research_settings.agents_at_once(settings) == 16
+
+
+def test_watching_a_colleague_finds_their_current_work_anywhere(world):
+    app, a, _, _, _, _, wid, base, _ = world
+    send(world, "@写手 把结论整理成一段话")
+    with app.state.maker() as d:
+        writer = d.scalar(
+            select(TeamMember).where(
+                TeamMember.workspace_id == wid, TeamMember.role == "writer"
+            )
+        ).id
+    current = a.get(base + f"/members/{writer}/run").json()
+    assert current["author_id"] == writer and current["run"]["status"] in {
+        "queued",
+        "running",
+    }
+    advisor = next(m["id"] for m in a.get(base).json()["members"] if m["role"] == "advisor")
+    assert a.get(base + f"/members/{advisor}/run").json() is None
+
+
+def test_a_colleagues_thinking_strength_goes_with_their_runs(world):
+    from backend.models import AgentRun
+    from backend.team_members import MemberConfig
+
+    app, a, _, _, _, _, wid, base, _ = world
+    writer = a.post(base + "/members/join", json={"key": "writer"}).json()["id"]
+    current = a.get(base + f"/members/{writer}").json()
+    config = MemberConfig(
+        **{k: current[k] for k in MemberConfig.model_fields if k in current}
+    ).model_dump()
+    assert config["reasoning_effort"] == "default"
+    config["reasoning_effort"] = "high"
+    saved = a.patch(
+        base + f"/members/{writer}",
+        json={"config": config, "revision": current["revision"]},
+    )
+    assert saved.status_code == 200, saved.text
+    assert "effort: high" in a.get(base + f"/members/{writer}").json()["source"]
+    send(world, "@写手 写一段摘要")
+    with app.state.maker() as d:
+        run = d.scalars(select(AgentRun).order_by(AgentRun.created_at.desc())).first()
+        assert run.runtime["model_options"] == {"reasoning_effort": "high"}
+
+
+def test_a_colleagues_conversations_list_where_they_work(world):
+    app, a, _, _, _, _, wid, base, overview = world
+    send(world, "@写手 把结论整理成一段话")
+    with app.state.maker() as d:
+        writer = d.scalar(
+            select(TeamMember).where(
+                TeamMember.workspace_id == wid, TeamMember.role == "writer"
+            )
+        ).id
+    rows = a.get(base + f"/members/{writer}/conversations").json()
+    general = next(c["id"] for c in overview["channels"] if c["key"] == "general")
+    assert rows[0]["channel_id"] == general and rows[0]["thread_id"] is None
+    assert rows[0]["title"].startswith("#") and rows[0]["status"] in {
+        "queued",
+        "running",
+        "completed",
+    }

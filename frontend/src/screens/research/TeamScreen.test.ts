@@ -398,10 +398,10 @@ describe("team member replies", () => {
           ],
         },
       });
-      expect(html).toContain('aria-expanded="false"');
-      expect(html).toContain(t("team.status.working"));
+      // At work the card is one line: what is being done now, and a way to watch.
+      expect(html).toContain(`${t("team.colleague.read")} folded-path.md`);
+      expect(html).toContain(t("team.watch"));
       expect(html).not.toContain(t("research.process.done"));
-      expect(html).not.toContain("folded-path.md");
       expect(html).toContain("Visible answer");
     });
 
@@ -457,7 +457,7 @@ describe("team member replies", () => {
       });
       expect(html).toContain(`dateTime="${started}"`);
       expect(html).toContain('data-live="true"');
-      expect(html).toContain(t("research.process.pending"));
+      expect(html).toContain(t("team.colleague.thinking"));
       expect(html).not.toContain(t("team.queued"));
     });
 

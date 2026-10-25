@@ -772,3 +772,60 @@
   background: var(--ui-elev);
   box-shadow: var(--ui-elev-1);
 }
+
+/* A task at work, in one line: what the colleague does now; a click opens the watch panel. */
+.liveLine {
+  display: flex;
+  align-items: center;
+  gap: var(--ui-space-8);
+  width: 100%;
+  min-height: var(--ui-control-md);
+  margin-top: var(--ui-space-4);
+  padding: 0 var(--ui-space-8);
+  border: 0;
+  border-radius: var(--ui-r-8);
+  background: transparent;
+  color: var(--ui-info-text);
+  font: inherit;
+  font-size: var(--ui-text-13);
+  text-align: left;
+  cursor: pointer;
+}
+
+.liveLine:hover {
+  background: var(--ui-hover);
+}
+
+.liveLine span:first-of-type {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.liveMore {
+  margin-left: auto;
+  color: var(--ui-fg-3);
+}
+
+/* A long message folds after its start, fading out; a button opens the rest. */
+.longText[data-clamped] {
+  max-height: var(--long-text);
+  overflow: hidden;
+  mask-image: linear-gradient(to bottom, #000 70%, transparent);
+}
+
+.longToggle {
+  margin-top: var(--ui-space-4);
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--ui-fg-2);
+  font: inherit;
+  font-size: var(--ui-text-13);
+  cursor: pointer;
+}
+
+.longToggle:hover {
+  color: var(--ui-fg);
+}

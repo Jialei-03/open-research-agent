@@ -78,7 +78,8 @@ describe("colleagues and deterministic catch-up", () => {
             },
             status: "running",
           },
-          `${t("team.colleague.run")} python train.py`,
+          // A status says what kind of work, not the command itself.
+          t("team.colleague.run"),
         ],
         [
           {
@@ -86,7 +87,8 @@ describe("colleagues and deterministic catch-up", () => {
             arguments: JSON.stringify({ path: "shared/plan.md" }),
             status: "completed",
           },
-          `${t("team.colleague.read")} shared/plan.md`,
+          // A file by its name, not its path.
+          `${t("team.colleague.read")} plan.md`,
         ],
         [
           {

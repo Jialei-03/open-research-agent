@@ -401,6 +401,85 @@ def install_team_routes(app, settings, db, auth, workspace_of):
             },
         )
 
+    @app.get(base + "/members/{member_id}/conversations")
+    def member_conversations(
+        id: str, member_id: str, a=Depends(auth), d=Depends(db)
+    ):
+        """Where a colleague works in this project: each group, thread or research,
+        with what their latest work there is doing, newest first."""
+        from .models import AgentRun
+
+        workspace = workspace_of(d, id, a)
+        try:
+            member = members.owned(d, workspace, member_id)
+        except ValueError as error:
+            raise HTTPException(404, str(error)) from None
+        out, seen = [], set()
+        for message in d.scalars(
+            select(TeamMessage)
+            .where(TeamMessage.author_id == member.id)
+            .order_by(TeamMessage.created_at.desc())
+            .limit(400)
+        ):
+            channel = team.channel_of(d, workspace, message.channel_id)
+            if channel.member_id == member.id:
+                continue  # Their own direct message is where this list is shown.
+            key = (message.channel_id, message.thread_id)
+            if key in seen:
+                continue
+            seen.add(key)
+            run = d.get(AgentRun, message.data.get("run_id") or "")
+            if message.thread_id:
+                root = team.root_of(d, workspace, channel, message.thread_id)
+                title = (
+                    root.title or root.question
+                    if hasattr(root, "question")
+                    else team.preview_text(getattr(root, "text", ""))
+                ) or f"#{channel.name}"
+            else:
+                title = (
+                    f"#{channel.name}" if not channel.member_id else channel.name
+                )
+            out.append(
+                {
+                    "channel_id": message.channel_id,
+                    "thread_id": message.thread_id,
+                    "title": title[:120],
+                    "status": run.status if run else "completed",
+                    "at": message.created_at,
+                }
+            )
+            if len(out) >= 30:
+                break
+        return out
+
+    @app.get(base + "/members/{member_id}/run")
+    def member_run(id: str, member_id: str, a=Depends(auth), d=Depends(db)):
+        """What a colleague is doing now (or did last), wherever in the project it is."""
+        from .models import AgentRun
+
+        workspace = workspace_of(d, id, a)
+        try:
+            member = members.owned(d, workspace, member_id)
+        except ValueError as error:
+            raise HTTPException(404, str(error)) from None
+        run = team.active_run(d, member)
+        if run is None and member.session_id:
+            run = d.scalar(
+                select(AgentRun)
+                .where(AgentRun.session_id == member.session_id)
+                .order_by(AgentRun.created_at.desc())
+                .limit(1)
+            )
+        if run is None:
+            return None
+        message = d.scalar(
+            select(TeamMessage).where(TeamMessage.source_key == f"run:{run.id}")
+        )
+        if message is None:
+            return None
+        return team.message_out(d, message)
+
     @app.get(base + "/members/{member_id}")
     def member_detail(id: str, member_id: str, a=Depends(auth), d=Depends(db)):
         workspace = workspace_of(d, id, a)

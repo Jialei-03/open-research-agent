@@ -20,6 +20,7 @@ import { CloudSection } from "./CloudSection";
 import { DataSection } from "./DataSection";
 import {
   AppearanceSection,
+  ColleaguesAtOnceSection,
   KeypointsSection,
   LanguageSection,
 } from "./PreferencesSection";
@@ -95,6 +96,7 @@ function Body({
           <AppearanceSection />
           <LanguageSection />
           <KeypointsSection />
+          <ColleaguesAtOnceSection />
         </>
       );
     case "models":

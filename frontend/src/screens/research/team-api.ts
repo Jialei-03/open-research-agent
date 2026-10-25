@@ -25,6 +25,8 @@ export interface MemberConfig {
   permissions: MemberPermissions;
   wake_turns: number;
   wake_tokens: number;
+  /** How hard this colleague thinks; "default" keeps the model's own. */
+  reasoning_effort?: "default" | "low" | "medium" | "high" | "xhigh" | "max";
 }
 export interface AgentDocument {
   source: string;
@@ -484,6 +486,21 @@ export interface MemberDetail extends TeamMember {
     last_message_at: string;
   }[];
 }
+export interface MemberConversation {
+  channel_id: string;
+  thread_id: string | null;
+  title: string;
+  status: string;
+  at: string;
+}
+export const readMemberConversations = (id: string, member: string) =>
+  api<MemberConversation[]>(
+    `${base(id)}/members/${encodeURIComponent(member)}/conversations`,
+  );
+export const readMemberRun = (id: string, member: string) =>
+  api<TeamMessage | null>(
+    `${base(id)}/members/${encodeURIComponent(member)}/run`,
+  );
 export const readMember = (id: string, member: string) =>
   api<MemberDetail>(`${base(id)}/members/${member}`);
 

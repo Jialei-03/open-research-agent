@@ -25,6 +25,10 @@ import {
   refreshTeam,
   readTeamFile,
   saveTeamFile,
+  readMemberConversations,
+  readMemberRun,
+  teamHash,
+  type MemberConversation,
   sendTeamMessage,
   teamFileHistory,
   type Team,
@@ -124,6 +128,7 @@ export function TeamRightPanel({
         {tab === "duty" &&
           (member ? (
             <Desk
+              workspace={team.workspace_id}
               member={member}
               messages={messages}
               onPath={(path) => {
@@ -148,6 +153,9 @@ export function TeamRightPanel({
           <Watch
             team={team}
             message={messages.find((m) => m.id === watching)}
+            memberId={
+              watching.startsWith("member:") ? watching.slice(7) : undefined
+            }
           />
         )}
         {tab === "changes" && (
@@ -562,8 +570,34 @@ function Changes({
 }
 
 /** Over a colleague's shoulder: the live steps of one run, its answer as it comes, and a way to stop it. */
-function Watch({ team, message }: { team: Team; message?: TeamMessage }) {
+function Watch({
+  team,
+  message: shown,
+  memberId,
+}: {
+  team: Team;
+  message?: TeamMessage;
+  /** Follow this colleague's current work, wherever in the project it is. */
+  memberId?: string;
+}) {
   const { t } = useI18n();
+  const [followed, setFollowed] = useState<TeamMessage | null>(null);
+  useEffect(() => {
+    if (!memberId) return;
+    let stale = false;
+    const load = () =>
+      readMemberRun(team.workspace_id, memberId).then(
+        (value) => !stale && setFollowed(value),
+        () => undefined,
+      );
+    void load();
+    const timer = window.setInterval(load, 2000);
+    return () => {
+      stale = true;
+      window.clearInterval(timer);
+    };
+  }, [team.workspace_id, memberId]);
+  const message = memberId ? followed || undefined : shown;
   const run = message?.run;
   if (!message || !run)
     return <p className={styles.unsupported}>{t("panel.watchGone")}</p>;
@@ -677,15 +711,33 @@ function ChimeIn({
 
 /** A colleague's desk, in their direct message: what they do now, what they were given, what they made. */
 function Desk({
+  workspace,
   member,
   messages,
   onPath,
 }: {
+  workspace: string;
   member: TeamMember;
   messages: TeamMessage[];
   onPath(path: string): void;
 }) {
   const { t, tn, locale } = useI18n();
+  // Where this colleague works in the project; a click goes back into that conversation.
+  const [places, setPlaces] = useState<MemberConversation[]>([]);
+  useEffect(() => {
+    let stale = false;
+    const load = () =>
+      readMemberConversations(workspace, member.id).then(
+        (value) => !stale && setPlaces(value),
+        () => undefined,
+      );
+    void load();
+    const timer = window.setInterval(load, 5000);
+    return () => {
+      stale = true;
+      window.clearInterval(timer);
+    };
+  }, [workspace, member.id]);
   const tasks = messages
     .filter((m) => m.author_id === member.id && m.run)
     .slice(-8)
@@ -731,6 +783,26 @@ function Desk({
         >
           {t("team.watch")}
         </Button>
+      )}
+      {!!places.length && (
+        <section aria-label={t("panel.conversations")}>
+          <h3>{t("panel.conversations")}</h3>
+          {places.map((place) => (
+            <a
+              key={`${place.channel_id}:${place.thread_id || ""}`}
+              className={styles.taskRow}
+              href={`#${teamHash(workspace, place.channel_id, place.thread_id || "")}`}
+            >
+              <span className={styles.taskChip} data-state={place.status}>
+                {t(`team.task.${place.status}` as MessageKey) || place.status}
+              </span>
+              <span className={styles.treeName}>{place.title}</span>
+              <time className={styles.taskWhen}>
+                {threadDate(place.at, locale, new Date(), "relative")}
+              </time>
+            </a>
+          ))}
+        </section>
       )}
       {!!tasks.length && (
         <section aria-label={t("panel.tasks")}>

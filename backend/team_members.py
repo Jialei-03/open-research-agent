@@ -47,6 +47,9 @@ class MemberConfig(Strict):
     permissions: Permissions = Field(default_factory=Permissions)
     wake_turns: int = Field(default=0, ge=0, le=256, strict=True)
     wake_tokens: int = Field(default=0, ge=0, le=2000000, strict=True)
+    reasoning_effort: Literal[
+        "default", "low", "medium", "high", "xhigh", "max"
+    ] = "default"
 
     @field_validator("name")
     @classmethod

@@ -368,10 +368,34 @@ def personal(d, owner):
         )
     ).first()
     if workspace is not None:
+        _note(workspace)
         return workspace
     workspace = create(d, owner, PERSONAL, kind="personal")
+    _note(workspace)
     ensure(d, workspace)
     for role in builtin_roles():
         join(d, workspace, role, announce=False)
     d.flush()
     return workspace
+
+
+NOTE = """# 个人空间 / Personal space
+
+This is the researcher's personal space, not a project. Talk with them here:
+answer, advise, discuss. Its folder is a scratch area holding nothing of theirs:
+do not browse, search or summarize it. Work on the researcher's material happens
+in a project; when a request needs files, data, experiments or a lasting record,
+say so and suggest creating a project (or name the existing one to use).
+"""
+
+
+def _note(workspace):
+    """The personal space's AGENTS.md, written once."""
+    from .agent_files import save_instructions, workspace_instructions
+
+    try:
+        # A new repo's AGENTS.md is just its title: still nothing written.
+        if workspace_instructions(workspace).strip() in {"", f"# {workspace.name}"}:
+            save_instructions(workspace, NOTE)
+    except (OSError, ValueError, RuntimeError):
+        pass

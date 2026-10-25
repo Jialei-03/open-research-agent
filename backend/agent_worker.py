@@ -224,6 +224,11 @@ def _process(app, job_id, cfg):
             r.context = research_chat.context(d, workspace, app.state.settings)
             d.commit()
         cfg = {**cfg, **(r.runtime or {}).get("model_options", {})}
+        # A colleague's effort the model cannot take falls back to its default.
+        from .model_options import controls
+
+        if cfg.get("reasoning_effort", "default") not in controls(cfg)["effort_levels"]:
+            cfg["reasoning_effort"] = "default"
         cfg["_request_options"] = request_options(cfg)
         validate_endpoint(cfg.get("base_url", ""))
         if not cfg.get("api_key") or cfg.get("model") != r.model:
@@ -1173,6 +1178,12 @@ def ready_job(d, settings):
     provider lease. Slots can change between selection and the first model call.
     """
     represented = set()
+    # How many colleagues work at once: an operator's override, else the researcher's setting.
+    from .research_settings import agents_at_once
+
+    research_limit = getattr(
+        settings, "agent_research_workers", 0
+    ) or agents_at_once(settings)
     translating = d.scalar(
         select(func.count())
         .select_from(AgentRun)
@@ -1225,11 +1236,7 @@ def ready_job(d, settings):
             and translating >= settings.agent_translation_workers
         ):
             continue
-        if (
-            job.lane == "research"
-            and settings.agent_research_workers
-            and researching >= settings.agent_research_workers
-        ):
+        if job.lane == "research" and researching >= research_limit:
             continue
         try:
             config = read_config(settings, job.owner, job.model_config_id)

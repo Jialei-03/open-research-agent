@@ -44,6 +44,7 @@ export function memberDraft(m?: Partial<MemberConfig>): MemberConfig {
     permissions: structuredClone(m?.permissions ?? defaultPermissions),
     wake_turns: m?.wake_turns ?? 0,
     wake_tokens: m?.wake_tokens ?? 0,
+    reasoning_effort: m?.reasoning_effort ?? "default",
   };
 }
 export function permissionChange(

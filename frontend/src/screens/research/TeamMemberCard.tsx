@@ -5,7 +5,7 @@ import { Button, Floating } from "../../ui";
 import { MemberAvatar } from "../team/MemberEditor";
 import { memberName } from "../team/member-model";
 import { readModels, type ModelRow } from "../setup/model-api";
-import { shortDuration, target, type RunStep } from "./process/model";
+import { argsOf, shortDuration, target, type RunStep } from "./process/model";
 import {
   readMember,
   settingsHash,
@@ -23,14 +23,22 @@ export function colleagueStatus(
   { t, tn }: Pick<Translator, "t" | "tn">,
 ) {
   if (member.enabled === false) return t("members.disabled");
+  // Paused is what the researcher chose; it shows even while the last task finishes.
+  if (member.paused) return t("team.status.paused");
   if (member.status === "queued")
     return tn("team.colleague.ahead", member.queue_ahead ?? 0);
   if (member.status !== "working") return t(`team.status.${member.status}`);
+  // Members sometimes start their status with their own name; the row already says it.
+  const own = member.status_text
+    ?.replace(new RegExp(`^\\s*${escape(member.name)}\\s*[:\\uff1a]\\s*`), "")
+    .trim();
   return t("team.colleague.working", {
-    task: member.status_text || colleagueTask(member.current_step, t),
+    task: own || colleagueTask(member.current_step, t),
     elapsed: shortDuration(member.elapsed_seconds ?? 0, t),
   });
 }
+
+const escape = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 export function colleagueTask(
   step: RunStep | null | undefined,
@@ -53,11 +61,27 @@ export function colleagueTask(
   return step
     ? [
         labels[step.name] ? t(labels[step.name]) : stepLabel(step, t),
-        target(step),
+        brief(step),
       ]
         .filter(Boolean)
         .join(" ")
     : t("team.colleague.thinking");
+}
+
+/** A status names what is touched in a word: a file's name or a site, never a path or command. */
+function brief(step: RunStep) {
+  const args = argsOf(step);
+  if (typeof args.command === "string" || typeof args.pattern === "string")
+    return "";
+  const path = typeof args.path === "string" ? args.path : "";
+  if (path) return path.replace(/\/+$/, "").split("/").pop() || "";
+  if (typeof args.url === "string")
+    try {
+      return new URL(args.url).hostname;
+    } catch {
+      return "";
+    }
+  return target(step).slice(0, 40);
 }
 
 function stepLabel(step: RunStep, t: Translator["t"]) {
