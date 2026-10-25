@@ -334,7 +334,7 @@ export function TeamScreen({
               <Columns3 size={16} aria-hidden />
             ) : channelId === "mentions" ? (
               <Bell size={16} aria-hidden />
-            ) : channel?.member_id || channelId === "threads" ? (
+            ) : channel?.member_id ? null : channelId === "threads" ? (
               <MessageSquare size={16} aria-hidden />
             ) : (
               <GroupAvatar members={team?.members || []} size="sm" />
@@ -353,7 +353,8 @@ export function TeamScreen({
               <h1>{title}</h1>
             )}
             {directMember && <ColleagueStatus member={directMember} />}
-            {team && channel && (
+            {/* A direct message is two people: only a group shows who is in it. */}
+            {team && channel && !channel.member_id && (
               <div
                 className={styles.counts}
                 role="group"
