@@ -27,7 +27,7 @@ for (const [locale, words] of [
   test.describe(`public site in ${locale}`, () => {
     test.use({ locale });
 
-    test("the first screen says what it does, with the real research page", async ({
+    test("the first screen says what it does, with the real reader", async ({
       page,
     }) => {
       await page.emulateMedia({ reducedMotion: "reduce" });
@@ -49,7 +49,7 @@ for (const [locale, words] of [
       const shot = page.getByRole("img", { name: words["site.shot.alt"] });
       await expect(shot).toHaveAttribute(
         "src",
-        /^\/assets\/site\/research-light(-en)?\.png$/,
+        /^\/assets\/site\/reader-light(-en)?\.png$/,
       );
       await expect
         .poll(() =>
@@ -145,13 +145,15 @@ for (const [locale, words] of [
         "href",
         "https://github.com/Jialei-03/open-research-agent",
       );
+      // The research agent is in development: the site does not offer it.
+      await expect(page.locator("#research")).toHaveCount(0);
       // Nothing on the page names a product from Claude or Anthropic as its own.
       await expect(page.locator("header")).not.toContainText(
         /claude|anthropic/i,
       );
       // Pictures below the first screen are lazy and have their size, so nothing shifts.
       const pictures = page.locator("main img");
-      expect(await pictures.count()).toBe(5);
+      expect(await pictures.count()).toBe(4);
       for (const img of await pictures.all()) {
         await expect(img).toHaveAttribute("width", "1440");
         await expect(img).toHaveAttribute("height", "900");
@@ -177,11 +179,11 @@ for (const [locale, words] of [
   });
 }
 
-test("the dark research picture follows the theme", async ({ page }) => {
+test("the dark reader picture follows the theme", async ({ page }) => {
   await page.emulateMedia({ colorScheme: "dark", reducedMotion: "reduce" });
   await page.goto("/");
   const shot = page.getByRole("img", { name: zh["site.shot.alt"] });
-  await expect(shot).toHaveAttribute("src", "/assets/site/research-dark.png");
+  await expect(shot).toHaveAttribute("src", "/assets/site/reader-dark.png");
   await expect.poll(() => loaded(page, "main figure img")).toBeTruthy();
 });
 

@@ -7,7 +7,6 @@ import { LanguageSwitch } from "./LanguageSwitch";
 import styles from "./product-site.module.css";
 
 export const REPOSITORY = "https://github.com/Jialei-03/open-research-agent";
-const RESULTS = `${REPOSITORY}/blob/main/docs/research/2026-10-20-third-results.md`;
 
 export const INSTALL =
   "git clone https://github.com/Jialei-03/open-research-agent";
@@ -16,18 +15,11 @@ const steps = [
   ["import", "01", null],
   ["guide", "02", "guide"],
   ["select", "03", "select"],
-  ["ask", "04", "reader"],
+  // The first screen already shows the reader with its assistant.
+  ["ask", "04", null],
 ] as const;
 
 const modes = ["original", "parallel", "translated"] as const;
-const research = [
-  "conversation",
-  "projects",
-  "environments",
-  "advisor",
-  "evidence",
-  "playbook",
-] as const;
 const local = ["data", "account", "models", "planned"] as const;
 
 function InstallCommand() {
@@ -126,9 +118,6 @@ export function ProductSite({ path }: { path: string }) {
           <span className={styles.brandName}>Open Research Agent</span>
         </a>
         <nav aria-label={t("site.nav")} className={styles.nav}>
-          <a href="#research" className={styles.navLink}>
-            {t("site.nav.research")}
-          </a>
           <a href="#how" className={styles.navLink}>
             {t("site.nav.how")}
           </a>
@@ -170,34 +159,8 @@ export function ProductSite({ path }: { path: string }) {
             </a>
           </div>
           <figure className={styles.shot}>
-            {picture("research", t("site.shot.alt"), false)}
+            {picture("reader", t("site.shot.alt"), false)}
           </figure>
-        </section>
-        <section
-          id="research"
-          className={styles.section}
-          aria-labelledby="research-title"
-        >
-          <h2 id="research-title" className={styles.heading} data-reveal>
-            {t("site.research.title")}
-          </h2>
-          <p className={styles.body} data-reveal>
-            {t("site.research.body")}
-          </p>
-          <div className={styles.modes} data-reveal>
-            {research.map((name) => (
-              <div key={name} className={styles.mode}>
-                <h3>{t(`site.research.${name}.title` as MessageKey)}</h3>
-                <p>{t(`site.research.${name}.body` as MessageKey)}</p>
-              </div>
-            ))}
-          </div>
-          <p className={styles.body} data-reveal>
-            {t("site.research.result")}{" "}
-            <a href={RESULTS} className={styles.inlineLink}>
-              {t("site.research.resultLink")}
-            </a>
-          </p>
         </section>
         <section
           id="how"
